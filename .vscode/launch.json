@@ -1,0 +1,70 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug JLink backend memory test",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "unittest",
+      "args": [
+        "tests.test_jlink_backend_memory",
+        "-v"
+      ],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "WCET_JLINK_HOST": "127.0.0.1",
+        "WCET_JLINK_PORT": "2331",
+        "WCET_JLINK_TEST_ADDR": "0x20004C00",
+        "WCET_JLINK_TEST_SIZE": "16"
+      },
+      "justMyCode": false
+    },
+    {
+      "name": "Debug current unittest file",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "unittest",
+      "args": [
+        "${relativeFile}",
+        "-v"
+      ],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "WCET_JLINK_HOST": "127.0.0.1",
+        "WCET_JLINK_PORT": "2331",
+        "WCET_JLINK_TEST_ADDR": "0x20004C00",
+        "WCET_JLINK_TEST_SIZE": "16",
+        "WCET_USB_CDC_TEST": "1",
+        "WCET_USB_SIM_BASE": "0x20004C00",
+        "WCET_USB_CDC_PAYLOAD_TEXT": "test",
+        "WCET_USB_CDC_RESUME_TARGET": "1",
+        "WCET_USB_CDC_VERBOSE": "1"
+      },
+      "justMyCode": false
+    },
+    {
+      "name": "Debug USB2 CDC JLink test",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "unittest",
+      "args": [
+        "tests.test_usb2_cdc_jlink",
+        "-v"
+      ],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "WCET_JLINK_HOST": "127.0.0.1",
+        "WCET_JLINK_PORT": "2331",
+        "WCET_JLINK_TIMEOUT": "2.0",
+        "WCET_USB_CDC_TEST": "1",
+        "WCET_USB_SIM_BASE": "0x20004C00",
+        "WCET_USB_CDC_PAYLOAD_TEXT": "test",
+        "WCET_USB_CDC_SETTLE_TIME": "0.05",
+        "WCET_USB_CDC_TX_TIMEOUT": "1.0",
+        "WCET_USB_CDC_RESUME_TARGET": "1",
+        "WCET_USB_CDC_VERBOSE": "1"
+      },
+      "justMyCode": false
+    }
+  ]
+}
