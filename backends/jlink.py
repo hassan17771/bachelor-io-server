@@ -13,6 +13,25 @@ from target.symbols import SymbolResolver
 
 logger = logging.getLogger(__name__)
 
+_HEXDIGITS = frozenset("0123456789abcdefABCDEF")
+
+
+def _is_hex(s: str) -> bool:
+    """True for a non-empty, even-length string of only hex digits."""
+    return bool(s) and len(s) % 2 == 0 and all(c in _HEXDIGITS for c in s)
+
+
+def _is_gdb_error(s: str) -> bool:
+    """True for a GDB error reply: 'E' followed by two hex digits (e.g. 'E01')."""
+    return len(s) == 3 and s[0] == "E" and s[1] in _HEXDIGITS and s[2] in _HEXDIGITS
+
+
+def _hex_to_text(s: str) -> str:
+    try:
+        return bytes.fromhex(s).decode("utf-8", errors="replace")
+    except ValueError:
+        return s
+
 
 @dataclass(frozen=True)
 class JLinkConnectionConfig:
@@ -71,24 +90,40 @@ class GdbRemoteClient:
         self._expect_ok(response, "write memory")
 
     def monitor_command(self, command: str) -> str:
-        encoded = command.encode("utf-8").hex()
-        self._send_packet(f"qRcmd,{encoded}")
-        console = []
+        """Run a 'monitor' (qRcmd) command and return its decoded text output.
+
+        Two reply conventions exist and both are accepted here:
+
+        * GDB standard -- zero or more 'O<hex>' console-output packets followed
+          by a literal 'OK' terminator.
+        * SEGGER J-Link GDB Server -- the output comes back as a SINGLE bare
+          hex-encoded packet (no 'O' prefix, no trailing 'OK'), or an empty
+          packet when the command produces no text. For example 'monitor reset'
+          replies with the hex of "Resetting target\\r\\n" and nothing more.
+
+        A plain "loop until OK" breaks against J-Link: the bare-hex reply is
+        neither 'O...' nor 'OK', so it raises 'unexpected response' (and a reply
+        with no terminator hangs until the socket times out). The returned text
+        is informational -- run-control callers (reset/resume/halt) ignore it
+        and only need this not to raise.
+        """
+        self._send_packet(f"qRcmd,{command.encode('utf-8').hex()}")
+        console: list[str] = []
         while True:
             response = self._read_packet()
-            # A console-output packet is 'O' followed by hex ('O48690a'); the
-            # success reply is exactly 'OK'. Since 'OK' also starts with 'O', it
-            # must be excluded here or it gets mistaken for output and we loop
-            # waiting for a packet that never comes (a recv timeout). A real
-            # 'O<hex>' packet can never equal 'OK' (odd-length, invalid hex).
-            if response.startswith("O") and response != "OK":
-                try:
-                    console.append(bytes.fromhex(response[1:]).decode("utf-8", errors="replace"))
-                except ValueError:
-                    console.append(response[1:])
+            if response in ("", "OK"):
+                return "".join(console)
+            if _is_gdb_error(response):
+                raise TargetError(f"GDB remote error for monitor {command!r}: {response}")
+            if response.startswith("O") and _is_hex(response[1:]):
+                # GDB-standard console output; more packets (incl. OK) follow.
+                console.append(_hex_to_text(response[1:]))
                 continue
-            self._expect_ok(response, f"monitor {command!r}")
-            return "".join(console)
+            if _is_hex(response):
+                # SEGGER bare-hex output: this single packet is the whole reply.
+                return "".join(console) + _hex_to_text(response)
+            # Unrecognised but not an error: surface it without breaking run-control.
+            return "".join(console) + response
 
     def interrupt(self) -> str:
         sock = self._require_socket()
