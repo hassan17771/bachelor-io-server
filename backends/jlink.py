@@ -76,7 +76,12 @@ class GdbRemoteClient:
         console = []
         while True:
             response = self._read_packet()
-            if response.startswith("O"):
+            # A console-output packet is 'O' followed by hex ('O48690a'); the
+            # success reply is exactly 'OK'. Since 'OK' also starts with 'O', it
+            # must be excluded here or it gets mistaken for output and we loop
+            # waiting for a packet that never comes (a recv timeout). A real
+            # 'O<hex>' packet can never equal 'OK' (odd-length, invalid hex).
+            if response.startswith("O") and response != "OK":
                 try:
                     console.append(bytes.fromhex(response[1:]).decode("utf-8", errors="replace"))
                 except ValueError:
