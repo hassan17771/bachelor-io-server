@@ -17,6 +17,7 @@ from backends.jlink import JLinkBackend, JLinkConnectionConfig
 from firmware_abi.usbh_otgfs import (
     CDC_DEVICE_DESCRIPTOR,
     DEFAULT_USBH_SIM_LAYOUT,
+    NUM_CH,
     OTG_FS_IRQn,
     URB_DONE,
     USBH_SIM_MAGIC,
@@ -70,8 +71,8 @@ class UsbhConfUrbSimTest(unittest.TestCase):
     """
 
     def setUp(self) -> None:
-        if not _truthy(os.environ.get("WCET_USB_HOST_TEST")):
-            raise unittest.SkipTest("set WCET_USB_HOST_TEST=1 to run the USB host hardware test")
+        # if not _truthy(os.environ.get("WCET_USB_HOST_TEST")):
+        #     raise unittest.SkipTest("set WCET_USB_HOST_TEST=1 to run the USB host hardware test")
 
         self.layout = DEFAULT_USBH_SIM_LAYOUT
         self.base = resolve_usbh_sim_base()
@@ -145,17 +146,28 @@ class UsbhConfUrbSimTest(unittest.TestCase):
         t.pend_irq(OTG_FS_IRQn)
 
     def _ack_out(self, ch: int) -> None:
-        """Complete an OUT/SETUP stage: mark it DONE and clear out_pending."""
-        self.target.write_u8(self._ch(ch, "urb_state"), URB_DONE)
+        """Complete an OUT/SETUP stage: clear out_pending, THEN mark it DONE.
+
+        Ordering is critical. urb_state=DONE is what unblocks the middleware's
+        poll loop (CTRL_*_WAIT), so it must be the LAST write. The firmware re-
+        submits the next URB on this channel the instant it sees DONE -- raising
+        out_pending again -- so if we cleared out_pending *after* DONE, our clear
+        could land in the gap (each write is a separate GDB round-trip) and stomp
+        the next request's out_pending. Clear the request flag first, signal
+        completion last.
+        """
         self.target.write_u8(self._ch(ch, "out_pending"), 0)
+        self.target.write_u8(self._ch(ch, "urb_state"), URB_DONE)
 
     def _provide_in(self, ch: int, data: bytes) -> None:
-        """Fulfil an IN stage: place the bytes, set the count, mark DONE."""
+        """Fulfil an IN stage: place the bytes/count, clear in_requested, then
+        mark DONE last (same ordering rule as _ack_out -- DONE unblocks the
+        middleware, so everything else must be written before it)."""
         t = self.target
         t.write(self._ch(ch, "in_buf"), data)
         t.write_u16(self._ch(ch, "xfer_count"), len(data))
-        t.write_u8(self._ch(ch, "urb_state"), URB_DONE)
         t.write_u8(self._ch(ch, "in_requested"), 0)
+        t.write_u8(self._ch(ch, "urb_state"), URB_DONE)
 
     # -- USBH_LL_SubmitURB (OUT/SETUP path) ----------------------------------
 
@@ -193,34 +205,69 @@ class UsbhConfUrbSimTest(unittest.TestCase):
         self._bring_up_port()
 
         deadline = time.monotonic() + self.timeout_s * 3
-        saw_in_stage = False
-        found_second_setup = False
+        counts = {"setup8": 0, "setup18": 0, "setup_other": 0, "status0": 0, "in": 0}
+        trace: list[str] = []
 
+        def log(ev: str) -> None:
+            trace.append(ev)
+            if len(trace) > 80:
+                del trace[0]
+
+        found = False
         while time.monotonic() < deadline:
             if t.read_u8(self._ch(CTRL_OUT_CH, "out_pending")) == 1:
                 out_len = t.read_u16(self._ch(CTRL_OUT_CH, "out_len"))
                 if out_len == 8:
                     setup = t.read(self._ch(CTRL_OUT_CH, "out_buf"), 8)
                     if setup == GET_DESCRIPTOR_DEVICE_18:
-                        found_second_setup = True
+                        counts["setup18"] += 1
+                        log("SETUP18")
+                        found = True
                         break
-                self._ack_out(CTRL_OUT_CH)  # first SETUP or zero-length status
+                    if setup == GET_DESCRIPTOR_DEVICE_8:
+                        counts["setup8"] += 1
+                        log("SETUP8")
+                    else:
+                        counts["setup_other"] += 1
+                        log("SETUP?=" + setup.hex())
+                    self._ack_out(CTRL_OUT_CH)
+                else:
+                    counts["status0"] += 1
+                    log(f"STATUS(out_len={out_len})")
+                    self._ack_out(CTRL_OUT_CH)
 
             if t.read_u8(self._ch(CTRL_IN_CH, "in_requested")) == 1:
-                saw_in_stage = True
+                counts["in"] += 1
+                log("IN")
                 self._provide_in(CTRL_IN_CH, CDC_DEVICE_DESCRIPTOR[:8])
 
-            time.sleep(0.005)
+            time.sleep(0.003)
 
+        header = {
+            f: t.read_u8(self._hdr(f))
+            for f in ("connected", "port_enabled", "port_speed", "reset_req",
+                      "ev_connect", "ev_disconnect", "ev_port_en")
+        }
+        chans = []
+        for n in range(NUM_CH):
+            chans.append(
+                f"ch{n}: ep=0x{t.read_u8(self._ch(n, 'ep_addr')):02x} "
+                f"type={t.read_u8(self._ch(n, 'ep_type'))} "
+                f"dir={t.read_u8(self._ch(n, 'ep_dir'))} "
+                f"urb={t.read_u8(self._ch(n, 'urb_state'))} "
+                f"outp={t.read_u8(self._ch(n, 'out_pending'))} "
+                f"outlen={t.read_u16(self._ch(n, 'out_len'))} "
+                f"inreq={t.read_u8(self._ch(n, 'in_requested'))} "
+                f"xfer={t.read_u16(self._ch(n, 'xfer_count'))}"
+            )
+        dump = "\n    ".join(chans)
         self.assertTrue(
-            saw_in_stage,
-            "the stack never submitted the IN data stage on ch[1] "
-            "(USBH_LL_SubmitURB IN path not reached)",
-        )
-        self.assertTrue(
-            found_second_setup,
-            "stack did not advance to GET_DESCRIPTOR(Device,18); the IN delivery "
-            "(GetURBState) or byte count (GetLastXferSize) did not take effect",
+            found,
+            "stack did not advance to GET_DESCRIPTOR(Device,18).\n"
+            f"  serviced counts: {counts}\n"
+            f"  last events: {trace[-40:]}\n"
+            f"  header: {header}\n"
+            f"  channels:\n    {dump}",
         )
 
 
