@@ -64,7 +64,7 @@ class Stm32OtgFsHostAbi(UsbHostSimAbi):
             return (channels,)
         return tuple(channels)
 
-    # -- 3.1: lifecycle / port ----------------------------------------------
+    # -- lifecycle / port ----------------------------------------------------
 
     def validate(self) -> UsbHostSimStatus:
         """Read and check the identity header USBH_LL_Start publishes.
@@ -122,7 +122,7 @@ class Stm32OtgFsHostAbi(UsbHostSimAbi):
         g.write_u8(self._hdr("ev_port_en"), 1)
         g.pend_irq(self.irqn)
 
-    # -- 3.2: per-transfer servicing ----------------------------------------
+    # -- per-transfer servicing ----------------------------------------------
 
     def channel_info(self, channel: int) -> UsbChannelInfo:
         g = self.gateway
@@ -169,11 +169,11 @@ class Stm32OtgFsHostAbi(UsbHostSimAbi):
     def ack_out(self, channel: int) -> None:
         """Complete an OUT/SETUP/status stage: clear out_pending, THEN mark DONE.
 
-        Ordering is required (see CLAUDE.md "Servicing write-ordering rule").
-        urb_state=DONE unblocks the middleware's CTRL_*_WAIT poll, which then
-        re-arms the next URB on this channel (raising out_pending again). Each
-        write is a separate ~ms GDB round-trip, so clearing out_pending *after*
-        DONE risks stomping that freshly-armed request. DONE must be last.
+        The DONE-last ordering is required. urb_state=DONE unblocks the
+        middleware's CTRL_*_WAIT poll, which then re-arms the next URB on this
+        channel (raising out_pending again). Each write is a separate ~ms GDB
+        round-trip, so clearing out_pending *after* DONE risks stomping that
+        freshly-armed request. DONE must be last.
         """
         g = self.gateway
         g.write_u8(self._ch(channel, "out_pending"), 0)

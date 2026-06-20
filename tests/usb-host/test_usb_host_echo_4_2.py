@@ -1,9 +1,9 @@
-"""Task 4.2 -- CDC bulk ping/pong against the real target over SWD/J-Link.
+"""CDC bulk ping/pong against the real target over SWD/J-Link.
 
-This is a HARDWARE test. After enumeration the target firmware (usb_host.c,
-tasks 4.2 / 5.2) becomes the talker: while the CDC class is active it transmits
-"ping <n>" on the CDC bulk-OUT pipe and receives the reply on the bulk-IN pipe,
-logging both over USART1:
+This is a HARDWARE test. After enumeration the target firmware (usb_host.c)
+becomes the talker: while the CDC class is active it transmits "ping <n>" on the
+CDC bulk-OUT pipe and receives the reply on the bulk-IN pipe, logging both over
+USART1:
 
     CDC write: ping 1
     CDC read: pong 1
@@ -13,7 +13,7 @@ ping/pong rounds with UsbHostCdcDevice.wait_and_echo, answering each "ping <n>"
 with "pong <n>". The firmware only emits ping <n+1> from its receive-complete
 callback -- i.e. after it has consumed pong <n> into its RX buffer -- so seeing
 the ping counter advance 1, 2, 3, ... is proof that every reply reached the
-target (the task-4.2 verify: "MCU RX buffer contains reply"). Nothing is mocked.
+target's RX buffer. Nothing is mocked.
 
     # start the J-Link GDB server first, e.g.
     #   JLinkGDBServerCLExe -device STM32F411CE -if SWD -speed 4000 -port 2331
@@ -61,10 +61,10 @@ def _env_int(name: str, default: int) -> int:
 
 
 class UsbHostCdcEchoTest(unittest.TestCase):
-    """Run the Phase-4.2 ping/pong exchange end-to-end on the target.
+    """Run the ping/pong exchange end-to-end on the target.
 
     Requires a JLinkGDBServerCLExe already attached to the STM32 and firmware
-    flashed with the sim shims plus the task-4.2 CDC application code.
+    flashed with the sim shims plus the CDC application code.
     """
 
     def setUp(self) -> None:

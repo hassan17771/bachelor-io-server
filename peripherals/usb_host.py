@@ -7,11 +7,11 @@ This module is the portable half of the USB-host mock. It defines:
 * the abstract per-MCU contract (:class:`UsbHostSimAbi`) that a concrete
   backend such as ``Stm32OtgFsHostAbi`` implements, and
 * the CDC protocol driver (:class:`UsbHostCdcDevice`) that speaks USB on top of
-  that contract -- Phase 4.
+  that contract.
 
-Design rule (see CLAUDE.md): this file must NOT import from
-``usb_host_otgfs.py``. The ABC layer stays MCU-agnostic so the same protocol
-code can drive OTG_FS today and NXP IP3511 / Nordic USBD tomorrow.
+This file must NOT import from ``usb_host_otgfs.py``: the ABC layer stays
+MCU-agnostic so the same protocol code can drive OTG_FS today and NXP IP3511 /
+Nordic USBD tomorrow.
 """
 from __future__ import annotations
 
@@ -160,23 +160,21 @@ CDC_GET_LINE_CODING = 0x21
 CDC_SET_LINE_CODING = 0x20
 CDC_SET_CONTROL_LINE_STATE = 0x22
 
-# Default CDC data-pipe assignment (see CLAUDE.md pipe table). The host transmits
-# on the bulk-OUT pipe (EP 0x01) and receives on the bulk-IN pipe (EP 0x81);
-# USBH_AllocPipe hands these out as pipes 3 and 4 during class init.
+# Default CDC data-pipe assignment: the host transmits on the bulk-OUT pipe
+# (EP 0x01) and receives on the bulk-IN pipe (EP 0x81); USBH_AllocPipe hands
+# these out as pipes 3 and 4 during class init.
 CDC_BULK_OUT_CH = 3
 CDC_BULK_IN_CH = 4
 
-# Default CDC-ACM device personality the mock presents during enumeration.
+# Default CDC-ACM device personality the mock presents during enumeration,
+# mirroring the STM32 Virtual COM Port (VID 0x0483 / PID 0x5740).
 #
-# These mirror the STM32 Virtual COM Port (VID 0x0483 / PID 0x5740). The device
-# descriptor matches firmware_abi's reference copy. The configuration descriptor
-# is a *compact* 62-byte CDC-ACM config (it drops only the optional Call
-# Management functional descriptor) for one reason: the firmware moves a control
-# data stage in a single URB through the 64-byte MMB in_buf, and the host
-# re-requests the configuration using the wTotalLength it reads here. Keeping the
-# whole config <= 64 bytes lets it be delivered intact in one URB. The STM32 CDC
-# host (USBH_CDC_InterfaceInit) binds purely off the interface/endpoint
-# descriptors and ignores the functional descriptors, so this is fully accepted.
+# The configuration descriptor is a compact 62-byte CDC-ACM config (it drops the
+# optional Call Management functional descriptor) so the whole config fits one
+# 64-byte URB: a control data stage moves through the 64-byte MMB in_buf in a
+# single URB, and the host re-requests the config using the wTotalLength it reads
+# here. USBH_CDC_InterfaceInit binds off the interface/endpoint descriptors and
+# ignores the functional ones, so the trimmed config is fully accepted.
 _DEFAULT_DEVICE_DESCRIPTOR = bytes(
     [
         0x12, 0x01, 0x00, 0x02, 0x02, 0x00, 0x00, 0x40,
@@ -271,7 +269,7 @@ class CdcEcho:
     sent: bytes
 
 
-# --- CDC protocol driver (Phase 4) ------------------------------------------
+# --- CDC protocol driver -----------------------------------------------------
 
 class UsbHostCdcDevice:
     """Acts as a CDC-ACM device for the target's USB host middleware.
@@ -320,7 +318,7 @@ class UsbHostCdcDevice:
         self.abi.wait_for_port_reset(timeout_s=timeout_s)
         self.abi.accept_port_reset(speed=speed)
 
-    # -- enumeration (task 4.1) ---------------------------------------------
+    # -- enumeration ---------------------------------------------------------
 
     def enumerate(
         self,
@@ -471,7 +469,7 @@ class UsbHostCdcDevice:
         encoded = text.encode("utf-16-le")
         return bytes([len(encoded) + 2, DESC_STRING]) + encoded
 
-    # -- CDC bulk data (task 4.2) -------------------------------------------
+    # -- CDC bulk data -------------------------------------------------------
 
     def wait_and_echo(
         self,

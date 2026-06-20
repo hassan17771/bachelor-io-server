@@ -1,4 +1,4 @@
-"""Task 3.2 -- Stm32OtgFsHostAbi per-transfer servicing.
+"""Stm32OtgFsHostAbi per-transfer servicing.
 
 Verifies wait_for_out / provide_in / ack_out / channel_info against an
 in-memory MMB (fake_mmb_gateway), so it runs with no J-Link and no target:
@@ -6,9 +6,9 @@ in-memory MMB (fake_mmb_gateway), so it runs with no J-Link and no target:
     cd wcet-io-server
     python tests/usb-host/test_usb_host_abi_3_2.py
 
-Covers the task-3.2 verify (the first SETUP the IO server must read back is
-80 06 00 01 00 00 08 00) plus the critical write-ordering rule: ack_out and
-provide_in must write urb_state=DONE LAST.
+Covers the first SETUP the IO server must read back (80 06 00 01 00 00 08 00)
+plus the critical write-ordering rule: ack_out and provide_in must write
+urb_state=DONE LAST.
 """
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ from target.gateway import TargetTimeoutError
 # The first SETUP CDC enumeration emits: GET_DESCRIPTOR(Device, wLength=8).
 GET_DESCRIPTOR_DEVICE_8 = bytes([0x80, 0x06, 0x00, 0x01, 0x00, 0x00, 0x08, 0x00])
 
-# Deterministic pipe allocation (see CLAUDE.md): ch0 EP0-OUT, ch1 EP0-IN,
+# Deterministic pipe allocation: ch0 EP0-OUT, ch1 EP0-IN,
 # ch3 bulk-OUT EP0x01, ch4 bulk-IN EP0x81.
 CTRL_OUT_CH = 0
 CTRL_IN_CH = 1
@@ -87,7 +87,7 @@ class Abi32Test(unittest.TestCase):
     # -- wait_for_out --------------------------------------------------------
 
     def test_wait_for_out_returns_first_setup(self) -> None:
-        """Task 3.2 verify: the first SETUP must read back as 80 06 00 01 00 00 08 00."""
+        """The first SETUP must read back as 80 06 00 01 00 00 08 00."""
         self._arm_setup(CTRL_OUT_CH, GET_DESCRIPTOR_DEVICE_8)
 
         pkt = self.abi.wait_for_out((CTRL_OUT_CH, BULK_OUT_CH), timeout_s=0.2)
@@ -130,7 +130,7 @@ class Abi32Test(unittest.TestCase):
 
         self.assertEqual(self.view.ch_get_u8(CTRL_OUT_CH, "out_pending"), 0)
         self.assertEqual(self.view.ch_get_u8(CTRL_OUT_CH, "urb_state"), URB_DONE)
-        # urb_state=DONE must be the LAST write (CLAUDE.md ordering rule).
+        # urb_state=DONE must be the LAST write (DONE-last ordering rule).
         last_addr, _ = self.gw.writes[-1]
         self.assertEqual(last_addr, self.view.ch_addr(CTRL_OUT_CH, "urb_state"))
         # ...and out_pending must have been cleared before it.

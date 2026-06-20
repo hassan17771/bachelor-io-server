@@ -35,9 +35,9 @@ def _env_int(name: str, default: int) -> int:
 
 class UsbHostConnectionTest(unittest.TestCase):
     """Issue *only* a device-connect interrupt and confirm the firmware acts on
-    it -- a focused check of firmware tasks 2.1 (usbh_sim_irq_handler) and 2.2
-    (the OTG_FS_IRQHandler patch). Nothing here drives port reset or
-    enumeration; that depends on the later USBH_LL_* patches (tasks 2.3 / 2.4).
+    it -- a focused check of usbh_sim_irq_handler and the OTG_FS_IRQHandler
+    patch. Nothing here drives port reset or enumeration; that depends on the
+    USBH_LL_* patches.
 
     Hardware test: needs firmware built with -DUSB_HOST_SIMULATION running on the
     target and a JLinkGDBServerCLExe already attached, e.g.

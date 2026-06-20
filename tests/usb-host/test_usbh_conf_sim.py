@@ -41,7 +41,7 @@ def _env_int(name: str, default: int) -> int:
 
 
 class UsbhConfSimTest(unittest.TestCase):
-    """Verify the task-2.3 USBH_LL_* sim shims by observing their effects in the
+    """Verify the USBH_LL_* sim shims by observing their effects in the
     MMB over SWD/J-Link. Covered:
 
         USBH_LL_Init      -> the block is memset to 0 at boot
@@ -55,8 +55,8 @@ class UsbhConfSimTest(unittest.TestCase):
         USBH_LL_Stop      -> only called on USBH_Stop/DeInit (disconnect path)
         USBH_LL_ClosePipe -> only called on FreePipe (re-enum / disconnect path)
 
-    Needs firmware built with -DUSB_HOST_SIMULATION (tasks 2.1/2.2/2.3) running
-    on the target, plus a JLinkGDBServerCLExe already attached, e.g.
+    Needs firmware built with -DUSB_HOST_SIMULATION running on the target, plus
+    a JLinkGDBServerCLExe already attached, e.g.
 
         JLinkGDBServerCLExe -device STM32F411CE -if SWD -speed 4000 -port 2331
 
@@ -101,7 +101,7 @@ class UsbhConfSimTest(unittest.TestCase):
         except TargetError as exc:
             self.fail(
                 f"host stack never published the magic ({exc}). Is the firmware "
-                "built with -DUSB_HOST_SIMULATION and at tasks 2.1/2.2/2.3?"
+                "built with -DUSB_HOST_SIMULATION?"
             )
 
     def tearDown(self) -> None:
@@ -194,9 +194,8 @@ class UsbhConfSimTest(unittest.TestCase):
         via USBH_LL_OpenPipe before submitting any URB. We accept the reset,
         then read the recorded pipe identities.
 
-        Note: one iteration later the stack submits the first SETUP through the
-        still-unpatched USBH_LL_SubmitURB (task 2.4), which faults on the
-        uninitialised HCD. That happens *after* OpenPipe has written ch[0]/ch[1],
+        Note: one iteration later the stack submits the first SETUP through
+        USBH_LL_SubmitURB. That happens *after* OpenPipe has written ch[0]/ch[1],
         and the records persist in RAM, so the assertions below are unaffected
         (J-Link reads memory regardless of core state; setUp resets next time).
         """

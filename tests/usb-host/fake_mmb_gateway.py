@@ -1,6 +1,6 @@
 """In-memory fake TargetGateway + MMB view for unit-testing the Python ABI.
 
-The Phase 3 ABI methods are pure transport logic: they read and write MMB
+The ABI methods are pure transport logic: they read and write MMB
 fields in a particular order. That logic can be verified without a J-Link or a
 target by backing the gateway with a plain dict and inspecting what it wrote --
 which is what this helper provides. Hardware behaviour (the middleware actually

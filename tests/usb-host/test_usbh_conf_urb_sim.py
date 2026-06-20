@@ -49,7 +49,7 @@ def _env_int(name: str, default: int) -> int:
 
 
 class UsbhConfUrbSimTest(unittest.TestCase):
-    """Verify the task-2.4 URB shims in usbh_conf.c over SWD/J-Link:
+    """Verify the URB shims in usbh_conf.c over SWD/J-Link:
 
         USBH_LL_SubmitURB     -> OUT/SETUP lands in out_buf (+out_pending);
                                  IN raises in_requested
@@ -65,8 +65,8 @@ class UsbhConfUrbSimTest(unittest.TestCase):
     (GET_DESCRIPTOR(Device,18)). This is one control transfer, not full
     enumeration.
 
-    Needs firmware built with -DUSB_HOST_SIMULATION (tasks 2.1-2.4) running on
-    the target, plus a JLinkGDBServerCLExe already attached. Enable with
+    Needs firmware built with -DUSB_HOST_SIMULATION running on the target, plus
+    a JLinkGDBServerCLExe already attached. Enable with
     WCET_USB_HOST_TEST=1 (skips otherwise).
     """
 
@@ -98,7 +98,7 @@ class UsbhConfUrbSimTest(unittest.TestCase):
         except TargetError as exc:
             self.fail(
                 f"host stack never published the magic ({exc}). Is the firmware "
-                "built with -DUSB_HOST_SIMULATION and at tasks 2.1-2.4?"
+                "built with -DUSB_HOST_SIMULATION?"
             )
 
     def tearDown(self) -> None:

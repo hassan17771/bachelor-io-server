@@ -1,7 +1,7 @@
-"""Task 4.1 -- full CDC enumeration against the real target over SWD/J-Link.
+"""Full CDC enumeration against the real target over SWD/J-Link.
 
 This is a HARDWARE test: it drives the actual STM32 USB-host middleware running
-on the target (firmware built with -DUSB_HOST_SIMULATION, tasks 1-2). It brings
+on the target (firmware built with -DUSB_HOST_SIMULATION). It brings
 the simulated port up, runs UsbHostCdcDevice.enumerate(), and asserts the
 firmware reached APPLICATION_READY -- i.e. enumeration completed AND the CDC
 class went active (HOST_USER_CLASS_ACTIVE). Nothing here is mocked.
@@ -67,7 +67,7 @@ def _truthy(value: str | None) -> bool:
 
 
 class UsbHostCdcEnumerateTest(unittest.TestCase):
-    """Run the Phase-4.1 enumeration end-to-end on the target.
+    """Run the enumeration end-to-end on the target.
 
     Requires a JLinkGDBServerCLExe already attached to the STM32 and firmware
     flashed with the sim shims. (Uncomment the guard below to make it opt-in via
@@ -199,7 +199,7 @@ class UsbHostCdcEnumerateTest(unittest.TestCase):
         )
 
         # Service the whole enumeration; finish when the firmware signals the CDC
-        # class is active (APPLICATION_READY) -- the task-4.1 verify.
+        # class is active (APPLICATION_READY).
         result = device.enumerate(
             done=lambda: self._appli_state() == APPLICATION_READY,
             timeout_s=float(os.environ.get("WCET_USB_HOST_ENUM_TIMEOUT", "20.0")),
@@ -215,7 +215,7 @@ class UsbHostCdcEnumerateTest(unittest.TestCase):
         for s in result.setups:
             print("    " + s.hex(" "))
 
-        # Task 4.1 verify: enumeration completed and the CDC class went active.
+        # Enumeration completed and the CDC class went active.
         self.assertEqual(
             final, APPLICATION_READY,
             f"Appli_state did not reach APPLICATION_READY (got {final}); {result.summary()}",

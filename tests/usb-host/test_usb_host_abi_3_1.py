@@ -1,4 +1,4 @@
-"""Task 3.1 -- Stm32OtgFsHostAbi lifecycle/port methods.
+"""Stm32OtgFsHostAbi lifecycle/port methods.
 
 Verifies validate / connect / disconnect / wait_for_port_reset /
 accept_port_reset against an in-memory MMB (fake_mmb_gateway), so it runs with

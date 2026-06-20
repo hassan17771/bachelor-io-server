@@ -119,7 +119,7 @@ class UsbhOtgFsAbiTest(unittest.TestCase):
                 getattr(self.layout, name), expected, f"{name} offset mismatch"
             )
 
-    # -- named ABI invariants from CLAUDE.md ---------------------------------
+    # -- named ABI invariants ------------------------------------------------
 
     def test_ch_helper_named_invariants(self) -> None:
         # ch(0).out_buf at block offset 28 (16 header + 12 channel offset)
@@ -145,10 +145,9 @@ class UsbhOtgFsAbiTest(unittest.TestCase):
     # -- constants -----------------------------------------------------------
 
     def test_identity_constants(self) -> None:
-        # Contract value shared with the firmware (Core/Inc/usbh_sim.h). NOTE the
-        # little-endian bytes are 55 42 42 48 = "UBBH", not "USBH" as the comment
-        # in CLAUDE.md claims -- a typo in the doc, not a mismatch here. What
-        # matters is firmware and Python agree on the same 32-bit sentinel.
+        # Contract value shared with the firmware (Core/Inc/usbh_sim.h). The
+        # little-endian bytes are 55 42 42 48 = "UBBH", not "USBH"; what matters
+        # is firmware and Python agree on the same 32-bit sentinel.
         self.assertEqual(USBH_SIM_MAGIC, 0x48424255)
         self.assertEqual(USBH_SIM_MAGIC.to_bytes(4, "little"), bytes([0x55, 0x42, 0x42, 0x48]))
         self.assertEqual(OTG_FS_IRQn, 67)
