@@ -1,6 +1,7 @@
 from .usb2 import Usb2CdcMockHost, Usb2Simulator
 from .usb_host import (
     CdcDeviceProfile,
+    CdcEcho,
     EnumerationError,
     EnumerationResult,
     UsbChannelInfo,
@@ -16,6 +17,7 @@ __all__ = [
     "Usb2CdcMockHost",
     "Usb2Simulator",
     "CdcDeviceProfile",
+    "CdcEcho",
     "EnumerationError",
     "EnumerationResult",
     "UsbChannelInfo",

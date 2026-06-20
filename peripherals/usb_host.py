@@ -160,6 +160,12 @@ CDC_GET_LINE_CODING = 0x21
 CDC_SET_LINE_CODING = 0x20
 CDC_SET_CONTROL_LINE_STATE = 0x22
 
+# Default CDC data-pipe assignment (see CLAUDE.md pipe table). The host transmits
+# on the bulk-OUT pipe (EP 0x01) and receives on the bulk-IN pipe (EP 0x81);
+# USBH_AllocPipe hands these out as pipes 3 and 4 during class init.
+CDC_BULK_OUT_CH = 3
+CDC_BULK_IN_CH = 4
+
 # Default CDC-ACM device personality the mock presents during enumeration.
 #
 # These mirror the STM32 Virtual COM Port (VID 0x0483 / PID 0x5740). The device
@@ -252,6 +258,19 @@ class EnumerationError(UsbHostSimError):
     """Raised when enumeration does not complete within the deadline."""
 
 
+@dataclass(frozen=True)
+class CdcEcho:
+    """One CDC bulk round-trip serviced by :meth:`UsbHostCdcDevice.wait_and_echo`.
+
+    ``received`` is the payload the host transmitted (its ``USBH_CDC_Transmit``);
+    ``sent`` is the reply delivered back to the host (its ``USBH_CDC_Receive``),
+    so the target's RX buffer ends up holding ``sent``.
+    """
+
+    received: bytes
+    sent: bytes
+
+
 # --- CDC protocol driver (Phase 4) ------------------------------------------
 
 class UsbHostCdcDevice:
@@ -275,12 +294,17 @@ class UsbHostCdcDevice:
         *,
         ctrl_out_ch: int = 0,
         ctrl_in_ch: int = 1,
+        bulk_out_ch: int = CDC_BULK_OUT_CH,
+        bulk_in_ch: int = CDC_BULK_IN_CH,
         max_data_stage: int = 64,
     ) -> None:
         self.abi = abi
         self.profile = profile if profile is not None else CdcDeviceProfile()
         self.ctrl_out_ch = ctrl_out_ch
         self.ctrl_in_ch = ctrl_in_ch
+        # CDC data pipes: the host transmits on bulk_out_ch, receives on bulk_in_ch.
+        self.bulk_out_ch = bulk_out_ch
+        self.bulk_in_ch = bulk_in_ch
         # One control data stage is one URB through the firmware in_buf; payloads
         # longer than this cannot be delivered in a single transfer.
         self.max_data_stage = max_data_stage
@@ -447,5 +471,42 @@ class UsbHostCdcDevice:
         encoded = text.encode("utf-16-le")
         return bytes([len(encoded) + 2, DESC_STRING]) + encoded
 
-    def wait_and_echo(self, response: bytes) -> bytes:  # pragma: no cover - Phase 4.2
-        raise NotImplementedError("UsbHostCdcDevice.wait_and_echo is implemented in task 4.2")
+    # -- CDC bulk data (task 4.2) -------------------------------------------
+
+    def wait_and_echo(
+        self,
+        response: Union[bytes, Callable[[bytes], bytes]] = b"hello\r\n",
+        *,
+        bulk_out_ch: Optional[int] = None,
+        bulk_in_ch: Optional[int] = None,
+        timeout_s: float = 5.0,
+        reply_timeout_s: float = 3.0,
+    ) -> CdcEcho:
+        """Service one CDC bulk round-trip: read the host's transmit, then reply.
+
+        The target's application calls ``USBH_CDC_Transmit`` (a single bulk-OUT
+        URB on ``bulk_out_ch``) and then ``USBH_CDC_Receive`` (a bulk-IN URB on
+        ``bulk_in_ch``). This blocks for the OUT, acks it, computes the reply,
+        and delivers it on the IN pipe -- so the host's RX buffer ends up holding
+        the reply. Both completions go through ``abi.ack_out`` / ``abi.provide_in``,
+        which keep the required ``urb_state = DONE`` last write-ordering.
+
+        ``response`` is either fixed reply bytes or a callable mapping the
+        received payload to the reply -- e.g. ``lambda rx: b"pong " + rx.split()[1]``
+        answers ``b"ping 7"`` with ``b"pong 7"``. Returns the :class:`CdcEcho`
+        recording what was received and what was sent.
+        """
+        out_ch = self.bulk_out_ch if bulk_out_ch is None else bulk_out_ch
+        in_ch = self.bulk_in_ch if bulk_in_ch is None else bulk_in_ch
+
+        out_pkt = self.abi.wait_for_out(out_ch, timeout_s=timeout_s)
+        received = bytes(out_pkt.data)
+        self.abi.ack_out(out_ch)
+
+        reply = response(received) if callable(response) else bytes(response)
+        if len(reply) > self.max_data_stage:
+            raise ValueError(
+                f"CDC reply {len(reply)} bytes exceeds one URB ({self.max_data_stage})"
+            )
+        self.abi.provide_in(in_ch, reply, timeout_s=reply_timeout_s)
+        return CdcEcho(received=received, sent=reply)
