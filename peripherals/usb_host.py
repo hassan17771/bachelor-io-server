@@ -15,9 +15,12 @@ code can drive OTG_FS today and NXP IP3511 / Nordic USBD tomorrow.
 """
 from __future__ import annotations
 
+import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Iterable, Union
+from dataclasses import dataclass, field
+from typing import Callable, Dict, Iterable, List, Mapping, Optional, Union
+
+from target.gateway import TargetTimeoutError
 
 # --- generic USB constants (standard, not MCU-specific) ---------------------
 
@@ -134,20 +137,315 @@ class UsbHostSimAbi(ABC):
         """Report the endpoint a pipe was opened for."""
 
 
+# --- standard USB / CDC control-request encoding ----------------------------
+
+# Standard device requests (USB 2.0 sec 9.4) carried in the SETUP bRequest.
+USB_REQ_SET_ADDRESS = 0x05
+USB_REQ_GET_DESCRIPTOR = 0x06
+USB_REQ_SET_CONFIGURATION = 0x09
+
+# GET_DESCRIPTOR descriptor types (wValue high byte).
+DESC_DEVICE = 0x01
+DESC_CONFIGURATION = 0x02
+DESC_STRING = 0x03
+
+# bmRequestType fields (SETUP byte 0).
+REQ_DIR_DEVICE_TO_HOST = 0x80          # bit 7 set: device -> host data stage
+REQ_TYPE_MASK = 0x60                   # bits 6:5: standard / class / vendor
+REQ_TYPE_STANDARD = 0x00
+REQ_TYPE_CLASS = 0x20
+
+# CDC PSTN class-specific requests (CDC120 / PSTN120 sec 6.3).
+CDC_GET_LINE_CODING = 0x21
+CDC_SET_LINE_CODING = 0x20
+CDC_SET_CONTROL_LINE_STATE = 0x22
+
+# Default CDC-ACM device personality the mock presents during enumeration.
+#
+# These mirror the STM32 Virtual COM Port (VID 0x0483 / PID 0x5740). The device
+# descriptor matches firmware_abi's reference copy. The configuration descriptor
+# is a *compact* 62-byte CDC-ACM config (it drops only the optional Call
+# Management functional descriptor) for one reason: the firmware moves a control
+# data stage in a single URB through the 64-byte MMB in_buf, and the host
+# re-requests the configuration using the wTotalLength it reads here. Keeping the
+# whole config <= 64 bytes lets it be delivered intact in one URB. The STM32 CDC
+# host (USBH_CDC_InterfaceInit) binds purely off the interface/endpoint
+# descriptors and ignores the functional descriptors, so this is fully accepted.
+_DEFAULT_DEVICE_DESCRIPTOR = bytes(
+    [
+        0x12, 0x01, 0x00, 0x02, 0x02, 0x00, 0x00, 0x40,
+        0x83, 0x04, 0x40, 0x57, 0x00, 0x02, 0x01, 0x02, 0x03, 0x01,
+    ]
+)
+
+_DEFAULT_CONFIG_DESCRIPTOR = bytes(
+    [
+        # Configuration descriptor (9), wTotalLength = 62 (0x003E)
+        0x09, 0x02, 0x3E, 0x00, 0x02, 0x01, 0x00, 0xC0, 0x32,
+        # Interface 0 -- CDC Communication, 1 endpoint (9)
+        0x09, 0x04, 0x00, 0x00, 0x01, 0x02, 0x02, 0x01, 0x00,
+        # CDC Header functional descriptor (5)
+        0x05, 0x24, 0x00, 0x10, 0x01,
+        # CDC Abstract Control Management functional descriptor (4)
+        0x04, 0x24, 0x02, 0x02,
+        # CDC Union functional descriptor (5)
+        0x05, 0x24, 0x06, 0x00, 0x01,
+        # Notification endpoint 0x82, interrupt IN (7)
+        0x07, 0x05, 0x82, 0x03, 0x08, 0x00, 0x10,
+        # Interface 1 -- CDC Data, 2 endpoints (9)
+        0x09, 0x04, 0x01, 0x00, 0x02, 0x0A, 0x00, 0x00, 0x00,
+        # Bulk OUT endpoint 0x01 (7)
+        0x07, 0x05, 0x01, 0x02, 0x40, 0x00, 0x00,
+        # Bulk IN endpoint 0x81 (7)
+        0x07, 0x05, 0x81, 0x02, 0x40, 0x00, 0x00,
+    ]
+)
+
+# 115200 baud, 1 stop bit, no parity, 8 data bits.
+_DEFAULT_LINE_CODING = bytes([0x00, 0xC2, 0x01, 0x00, 0x00, 0x00, 0x08])
+
+# iManufacturer / iProduct / iSerialNumber indices in the device descriptor.
+_DEFAULT_STRINGS: Dict[int, str] = {
+    1: "STMicroelectronics",
+    2: "STM32 Virtual ComPort",
+    3: "000000000123",
+}
+
+
+@dataclass(frozen=True)
+class CdcDeviceProfile:
+    """The descriptors and line coding the mock CDC device replies with.
+
+    Each value the host can pull in one control transfer must fit a single URB
+    (see ``UsbHostCdcDevice.max_data_stage``); the defaults are sized for that.
+    """
+
+    device_descriptor: bytes = _DEFAULT_DEVICE_DESCRIPTOR
+    config_descriptor: bytes = _DEFAULT_CONFIG_DESCRIPTOR
+    line_coding: bytes = _DEFAULT_LINE_CODING
+    strings: Mapping[int, str] = field(default_factory=lambda: dict(_DEFAULT_STRINGS))
+    lang_id: int = 0x0409  # US English
+
+
+@dataclass
+class EnumerationResult:
+    """A record of what :meth:`UsbHostCdcDevice.enumerate` serviced."""
+
+    setups: List[bytes] = field(default_factory=list)
+    data_out: List[bytes] = field(default_factory=list)
+    address: Optional[int] = None
+    configuration: Optional[int] = None
+    set_configuration: bool = False
+    got_line_coding: bool = False
+    truncated: bool = False
+    completed: bool = False
+
+    def summary(self) -> str:
+        return (
+            f"setups={len(self.setups)} address={self.address} "
+            f"configuration={self.configuration} got_line_coding={self.got_line_coding} "
+            f"truncated={self.truncated} completed={self.completed}"
+        )
+
+
+class EnumerationError(UsbHostSimError):
+    """Raised when enumeration does not complete within the deadline."""
+
+
 # --- CDC protocol driver (Phase 4) ------------------------------------------
 
 class UsbHostCdcDevice:
     """Acts as a CDC-ACM device for the target's USB host middleware.
 
-    Implemented in Phase 4 on top of an :class:`UsbHostSimAbi`. Declared here so
-    the protocol layer's home is fixed and MCU-agnostic.
+    Built on an :class:`UsbHostSimAbi`, so it is MCU-agnostic: every transfer is
+    completed through ``abi.ack_out`` / ``abi.provide_in``, which enforce the
+    required ``urb_state = DONE`` last write-ordering rule.
+
+    ``enumerate`` does not script a fixed list of SETUPs; it services whatever
+    control transfers the host stack issues, decoding each SETUP packet and
+    answering the data/status stages by direction. That is robust to the stack's
+    own ordering (device descriptor in two reads, string descriptors, the CDC
+    class GET_LINE_CODING, etc.).
     """
 
-    def __init__(self, abi: UsbHostSimAbi) -> None:
+    def __init__(
+        self,
+        abi: UsbHostSimAbi,
+        profile: Optional[CdcDeviceProfile] = None,
+        *,
+        ctrl_out_ch: int = 0,
+        ctrl_in_ch: int = 1,
+        max_data_stage: int = 64,
+    ) -> None:
         self.abi = abi
+        self.profile = profile if profile is not None else CdcDeviceProfile()
+        self.ctrl_out_ch = ctrl_out_ch
+        self.ctrl_in_ch = ctrl_in_ch
+        # One control data stage is one URB through the firmware in_buf; payloads
+        # longer than this cannot be delivered in a single transfer.
+        self.max_data_stage = max_data_stage
 
-    def enumerate(self) -> None:  # pragma: no cover - Phase 4.1
-        raise NotImplementedError("UsbHostCdcDevice.enumerate is implemented in task 4.1")
+    # -- bring-up ------------------------------------------------------------
+
+    def attach(self, speed: int = SPEED_FULL, timeout_s: float = 3.0) -> None:
+        """Present the device and bring the port up (connect -> reset -> enable).
+
+        Leaves the stack about to enumerate, with the control pipes open.
+        """
+        self.abi.connect(speed=speed)
+        self.abi.wait_for_port_reset(timeout_s=timeout_s)
+        self.abi.accept_port_reset(speed=speed)
+
+    # -- enumeration (task 4.1) ---------------------------------------------
+
+    def enumerate(
+        self,
+        done: Optional[Callable[[], bool]] = None,
+        *,
+        timeout_s: float = 20.0,
+        setup_timeout_s: float = 1.0,
+        stage_timeout_s: float = 3.0,
+    ) -> EnumerationResult:
+        """Service control transfers until the device is configured and active.
+
+        ``done`` is an optional completion predicate evaluated between transfers
+        -- the hardware test passes ``lambda: Appli_state == APPLICATION_READY``,
+        the firmware-side signal that the CDC class went active. With no ``done``
+        the driver stops once it has serviced SET_CONFIGURATION and the CDC
+        GET_LINE_CODING (the same traffic that triggers APPLICATION_READY).
+
+        Raises :class:`EnumerationError` if neither condition is met before
+        ``timeout_s`` elapses.
+        """
+        result = EnumerationResult()
+        deadline = time.monotonic() + timeout_s
+
+        while time.monotonic() < deadline:
+            if self._is_complete(done, result):
+                result.completed = True
+                return result
+
+            remaining = deadline - time.monotonic()
+            poll = max(0.05, min(setup_timeout_s, remaining))
+            try:
+                pkt = self.abi.wait_for_out(self.ctrl_out_ch, timeout_s=poll)
+            except TargetTimeoutError:
+                continue  # no SETUP yet -- loop re-checks completion / deadline
+
+            if pkt.is_setup:
+                self._service_control_transfer(pkt.data, result, stage_timeout_s)
+            else:
+                # Stray non-SETUP OUT on the control pipe; ack and move on.
+                self.abi.ack_out(self.ctrl_out_ch)
+
+        if self._is_complete(done, result):
+            result.completed = True
+            return result
+        raise EnumerationError(
+            f"enumeration did not complete within {timeout_s}s ({result.summary()})"
+        )
+
+    def _is_complete(self, done: Optional[Callable[[], bool]], result: EnumerationResult) -> bool:
+        if done is not None:
+            return bool(done())
+        return result.set_configuration and result.got_line_coding
+
+    def _service_control_transfer(
+        self, setup: bytes, result: EnumerationResult, stage_timeout_s: float
+    ) -> None:
+        """Drive one control transfer's data + status stages off its SETUP.
+
+        The SETUP itself is already pending on the control OUT pipe. Stage
+        directions follow the middleware's control FSM:
+          * device->host with data -> DATA IN on the control IN pipe, then a
+            zero-length STATUS OUT on the control OUT pipe;
+          * host->device, no data  -> zero-length STATUS IN on the control IN pipe;
+          * host->device with data  -> DATA OUT on the control OUT pipe, then a
+            zero-length STATUS IN on the control IN pipe.
+        Every completion goes through ack_out / provide_in (DONE written last).
+        """
+        bm_request_type = setup[0]
+        b_request = setup[1]
+        w_value = setup[2] | (setup[3] << 8)
+        w_length = setup[6] | (setup[7] << 8)
+        device_to_host = bool(bm_request_type & REQ_DIR_DEVICE_TO_HOST)
+
+        result.setups.append(bytes(setup))
+        self._note_request(result, bm_request_type, b_request, w_value)
+
+        # Acknowledge the SETUP stage (DONE last, inside ack_out).
+        self.abi.ack_out(self.ctrl_out_ch)
+
+        if w_length == 0:
+            if device_to_host:
+                self._status_out(stage_timeout_s)
+            else:
+                # Zero-length STATUS IN acknowledges the request.
+                self.abi.provide_in(self.ctrl_in_ch, b"", timeout_s=stage_timeout_s)
+            return
+
+        if device_to_host:
+            data = self._respond(setup)[:w_length]
+            if len(data) > self.max_data_stage:
+                data = data[: self.max_data_stage]
+                result.truncated = True
+            self.abi.provide_in(self.ctrl_in_ch, data, timeout_s=stage_timeout_s)
+            self._status_out(stage_timeout_s)
+        else:
+            # Host->device data stage (e.g. SET_LINE_CODING): take the payload...
+            out_pkt = self.abi.wait_for_out(self.ctrl_out_ch, timeout_s=stage_timeout_s)
+            self.abi.ack_out(self.ctrl_out_ch)
+            result.data_out.append(bytes(out_pkt.data))
+            # ...then acknowledge with a zero-length STATUS IN.
+            self.abi.provide_in(self.ctrl_in_ch, b"", timeout_s=stage_timeout_s)
+
+    def _status_out(self, stage_timeout_s: float) -> None:
+        """Consume the host's zero-length STATUS OUT on the control OUT pipe."""
+        self.abi.wait_for_out(self.ctrl_out_ch, timeout_s=stage_timeout_s)
+        self.abi.ack_out(self.ctrl_out_ch)
+
+    def _note_request(
+        self, result: EnumerationResult, bm_request_type: int, b_request: int, w_value: int
+    ) -> None:
+        req_type = bm_request_type & REQ_TYPE_MASK
+        if req_type == REQ_TYPE_STANDARD:
+            if b_request == USB_REQ_SET_ADDRESS:
+                result.address = w_value & 0xFF
+            elif b_request == USB_REQ_SET_CONFIGURATION:
+                result.configuration = w_value & 0xFF
+                result.set_configuration = True
+        elif req_type == REQ_TYPE_CLASS and b_request == CDC_GET_LINE_CODING:
+            result.got_line_coding = True
+
+    def _respond(self, setup: bytes) -> bytes:
+        """The data bytes for a device->host control request (pre-truncation)."""
+        bm_request_type = setup[0]
+        b_request = setup[1]
+        w_value = setup[2] | (setup[3] << 8)
+        req_type = bm_request_type & REQ_TYPE_MASK
+
+        if req_type == REQ_TYPE_STANDARD and b_request == USB_REQ_GET_DESCRIPTOR:
+            desc_type = (w_value >> 8) & 0xFF
+            desc_index = w_value & 0xFF
+            if desc_type == DESC_DEVICE:
+                return self.profile.device_descriptor
+            if desc_type == DESC_CONFIGURATION:
+                return self.profile.config_descriptor
+            if desc_type == DESC_STRING:
+                return self._string_descriptor(desc_index)
+            return b""
+        if req_type == REQ_TYPE_CLASS and b_request == CDC_GET_LINE_CODING:
+            return self.profile.line_coding
+        return b""
+
+    def _string_descriptor(self, index: int) -> bytes:
+        """Build a USB string descriptor (index 0 is the LANGID array)."""
+        if index == 0:
+            return bytes([4, DESC_STRING, self.profile.lang_id & 0xFF,
+                          (self.profile.lang_id >> 8) & 0xFF])
+        text = self.profile.strings.get(index, "?")
+        encoded = text.encode("utf-16-le")
+        return bytes([len(encoded) + 2, DESC_STRING]) + encoded
 
     def wait_and_echo(self, response: bytes) -> bytes:  # pragma: no cover - Phase 4.2
         raise NotImplementedError("UsbHostCdcDevice.wait_and_echo is implemented in task 4.2")
