@@ -1,365 +1,248 @@
 # Peripheral Simulation Backend Architecture
 
-This document describes the architecture below the peripheral simulation layer.
-The goal is to let test scenarios mock many MCU inputs and peripherals while
-keeping the simulation logic independent from the debug server, probe, and
-transport being used.
+The IO server lets a host (tests, scenarios) **mock an MCU peripheral without the
+real hardware on the other end**. The firmware runs unchanged except for thin
+simulation shims that move data through a small RAM block (the *Mocking Memory
+Block*, MMB) instead of a physical bus. The host drives that block over a debug
+probe.
 
-Peripheral simulators should express peripheral intent, such as "inject a USB
-SETUP packet" or "set GPIO pin 3 high". Backend adapters should express target
-mechanics, such as "write target memory", "pend an IRQ", or "resolve a symbol".
+Two ideas keep this reusable across peripherals and probes:
 
-## Scope
+- **Peripheral simulators express intent** — "inject a SETUP packet", "set GPIO 3 high".
+- **Backends express mechanics** — "write target memory", "pend an IRQ", "reset".
 
-This document focuses on the layers under the peripheral simulation layer:
+Neither knows about the other: a USB simulator never learns whether the session
+runs over J-Link or OpenOCD, and a backend never learns what a SETUP packet is.
 
-- Target access API
-- Backend adapters
-- Debug server integration
-- Probe and transport configuration
-- Firmware-side simulation ABI
-
-It does not define the full test engine API or scenario language.
-
-## Layer Model
+## Layer model
 
 ```mermaid
 flowchart TD
-    Engine[Test Engine / Scenario Runner]
-    Peripherals[Peripheral Simulation Layer<br/>USB2, UART, GPIO, ADC, I2C, SPI]
-    Gateway[Target Gateway API<br/>memory, symbols, IRQs, reset, run-control]
-    Backend[Backend Adapter<br/>OpenOCD, J-Link, pyOCD, QEMU, custom bridge]
-    Server[Debug Server / Access Process<br/>OpenOCD, JLinkGDBServer, pyOCD, simulator]
-    Probe[Probe / Transport Layer<br/>ST-LINK, J-Link, CMSIS-DAP, FTDI, SWD, JTAG]
-    Target[MCU Firmware<br/>simulation blocks in RAM]
+    Engine[Test Engine / Scenario]
+    Peripherals[Peripheral Simulators<br/>USB-host, USB2, UART, GPIO, ADC...]
+    Gateway[TargetGateway API<br/>memory · IRQ · reset · run-control · symbols]
+    Backend[Backend Adapter<br/>J-Link · OpenOCD · pyOCD · simulator]
+    Server[Debug Server<br/>JLinkGDBServer · OpenOCD]
+    Probe[Probe / Transport<br/>J-Link · ST-LINK · CMSIS-DAP · SWD/JTAG]
+    Target[MCU Firmware<br/>MMB in RAM + sim shims]
 
-    Engine --> Peripherals
-    Peripherals --> Gateway
-    Gateway --> Backend
-    Backend --> Server
-    Server --> Probe
-    Probe --> Target
+    Engine --> Peripherals --> Gateway --> Backend --> Server --> Probe --> Target
 ```
 
-The important boundary is between `Peripheral Simulation Layer` and
-`Target Gateway API`. A USB simulator, UART simulator, or GPIO simulator should
-not know whether the current session uses OpenOCD over ST-LINK, OpenOCD over
-CMSIS-DAP, J-Link GDB Server, pyOCD, or a software simulator.
+The load-bearing boundary is **Peripheral ↔ TargetGateway**. Everything above it
+is portable; everything below it is probe-specific.
 
-## Responsibilities
-
-| Layer | Responsibility | Should Not Know |
+| Layer | Owns | Must not know |
 | --- | --- | --- |
-| Test engine | Runs scenario steps and assertions | Memory layout details |
-| Peripheral simulation | Converts peripheral events into firmware ABI writes and reads | Debug server protocol |
-| Target gateway | Stable target operations: memory, symbols, IRQs, reset, halt/resume | Peripheral protocol details |
-| Backend adapter | Implements target gateway for one access mechanism | Test scenario meaning |
-| Debug server | Talks to hardware or simulator | Higher-level peripheral intent |
-| Probe/transport | Physical or virtual debug connection | Test semantics |
-| Firmware ABI | Versioned RAM blocks and interrupt/event contract | Host backend implementation |
+| Peripheral simulator | Peripheral protocol → MMB reads/writes | Debug-server protocol |
+| TargetGateway | Stable target ops: memory, IRQ, reset, halt/resume, symbols | Peripheral meaning |
+| Backend adapter | One access mechanism behind the gateway | Test semantics |
+| Firmware ABI (MMB) | Versioned RAM block + event contract | Host backend |
 
-## Core Abstraction
-
-Every peripheral simulator should depend on a `TargetGateway` style interface.
+## TargetGateway — the one interface peripherals depend on
 
 ```python
 class TargetGateway:
-    def read(self, address: int, size: int) -> bytes: ...
-    def write(self, address: int, data: bytes) -> None: ...
-
-    def read_u8(self, address: int) -> int: ...
-    def write_u8(self, address: int, value: int) -> None: ...
-    def read_u16(self, address: int) -> int: ...
-    def write_u16(self, address: int, value: int) -> None: ...
-    def read_u32(self, address: int) -> int: ...
-    def write_u32(self, address: int, value: int) -> None: ...
-
-    def resolve_symbol(self, name: str) -> int: ...
-
-    def pend_irq(self, irqn: int) -> None: ...
-    def halt(self) -> None: ...
-    def resume(self) -> None: ...
-    def reset(self) -> None: ...
-
-    def wait_until(self, predicate, timeout_s: float) -> None: ...
+    def read(self, addr, size) -> bytes: ...
+    def write(self, addr, data) -> None: ...
+    def read_u8/u16/u32(self, addr) -> int: ...
+    def write_u8/u16/u32(self, addr, value) -> None: ...
+    def resolve_symbol(self, name) -> int: ...
+    def pend_irq(self, irqn) -> None: ...
+    def reset(self) / halt() / resume() -> None: ...
+    def wait_until(self, predicate, timeout_s) -> None: ...
     def transaction(self, fn) -> None: ...
 ```
 
-The gateway is intentionally low level. It provides enough machinery for
-peripheral simulators to drive firmware-resident simulation blocks without
-binding those simulators to OpenOCD, J-Link, pyOCD, or any specific probe.
-
-## Backend Adapter Model
+It is deliberately low level — just enough to drive a firmware-resident block
+without binding to any probe.
 
 ```mermaid
 classDiagram
     class TargetGateway {
-        +read(address, size) bytes
-        +write(address, data)
-        +resolve_symbol(name) int
+        <<interface>>
+        +read/write(...)
         +pend_irq(irqn)
-        +halt()
-        +resume()
-        +reset()
-        +transaction(fn)
+        +reset() halt() resume()
+        +wait_until(pred, t)
     }
-
-    class OpenOcdBackend {
-        +connect_telnet()
-        +send_mdb()
-        +send_mdh()
-        +send_mww()
-    }
-
-    class JLinkBackend {
-        +connect_gdb_server()
-        +memory_read()
-        +memory_write()
-        +monitor_command()
-    }
-
-    class PyOcdBackend {
-        +open_session()
-        +read_memory_block8()
-        +write_memory_block8()
-    }
-
-    class SimulatorBackend {
-        +connect_socket()
-        +read_memory()
-        +write_memory()
-    }
-
-    TargetGateway <|.. OpenOcdBackend
     TargetGateway <|.. JLinkBackend
+    TargetGateway <|.. OpenOcdBackend
     TargetGateway <|.. PyOcdBackend
     TargetGateway <|.. SimulatorBackend
 ```
 
-OpenOCD and J-Link should be peer backend adapters. OpenOCD can itself be
-configured with different adapter drivers, but that is an implementation detail
-inside the OpenOCD backend configuration.
+This project ships the **J-Link backend** (GDB-remote to `JLinkGDBServerCLExe`).
+OpenOCD/pyOCD are peers — swapping them changes config, not peripheral code.
 
-## OpenOCD Backend
+## Firmware Simulation ABI (the MMB)
 
-The OpenOCD backend should connect to an OpenOCD server and implement
-`TargetGateway` operations using OpenOCD commands.
+The host never pokes raw peripheral registers. The firmware instead exposes one
+explicit **versioned RAM block per peripheral**, pinned at a fixed address. Each
+block starts with a magic/version/size header the host validates before driving
+any field. The host "wakes" the firmware by pending the peripheral IRQ.
 
-Typical operations:
-
-| Gateway operation | OpenOCD implementation |
-| --- | --- |
-| `read(address, size)` | `mdb`, `mdh`, `mdw` |
-| `write(address, data)` | `mwb`, `mwh`, `mww` |
-| `pend_irq(irqn)` | write NVIC ISPR |
-| `halt()` | `halt` |
-| `resume()` | `resume` |
-| `reset()` | `reset` or `reset halt` |
-
-Example configuration:
-
-```yaml
-backend: openocd
-server:
-  executable: openocd
-  config: tools/link/blueUSB_stlink_swd.cfg
-connection:
-  telnet_host: 127.0.0.1
-  telnet_port: 4444
-probe:
-  adapter: st-link
-  transport: swd
+```mermaid
+flowchart LR
+    subgraph Host
+      Sim[Peripheral Simulator]
+    end
+    subgraph "Target RAM"
+      H["header<br/>magic · version · size"]
+      F["data fields<br/>(owned by host or firmware)"]
+    end
+    Sim -- "validate header" --> H
+    Sim -- "read/write fields" --> F
+    Sim -- "pend_irq → run shim" --> Target((sim shim))
 ```
 
-Another OpenOCD configuration may use CMSIS-DAP, FTDI, or J-Link if the local
-OpenOCD build supports that adapter. The peripheral simulators should not
-change when this probe configuration changes.
+**Notifications last.** A peripheral injection is *several writes followed by one
+notification*. Always write all payload/flags first and signal completion last,
+so the firmware never observes a half-written event. (The USB-host layer below
+makes this rule concrete as the `urb_state = DONE`-last ordering.)
 
-## J-Link Backend
+---
 
-The J-Link backend should be separate from OpenOCD. It can use one of several
-implementation strategies:
+# USB-OTG (host) — abstract architecture
 
-- Connect to `JLinkGDBServer` through the GDB remote protocol
-- Use SEGGER's J-Link command interface
-- Use a library wrapper if one is chosen for the project
+This is the first full peripheral built on the model above: the host mocks a
+**USB CDC-ACM device** so the STM32 OTG_FS **USB-Host** middleware enumerates and
+talks to it with no physical device attached.
 
-Example configuration:
+## Two orthogonal abstractions
 
-```yaml
-backend: jlink
-server:
-  executable: JLinkGDBServerCLExe
-  device: STM32F103C8
-  interface: SWD
-  speed_khz: 1000
-connection:
-  host: 127.0.0.1
-  gdb_port: 2331
+The USB-host stack factors into a portable half and an MCU-specific half — the
+same split as Peripheral/Backend, applied inside the peripheral:
+
+```mermaid
+flowchart TD
+    CDC[UsbHostCdcDevice<br/>CDC protocol · enumerate · echo<br/><i>MCU-agnostic</i>]
+    ABI[UsbHostSimAbi  ABC<br/>connect · wait_for_out · provide_in · ack_out<br/><i>abstract per-MCU contract</i>]
+    OTG[Stm32OtgFsHostAbi<br/>OTG_FS MMB offsets · DONE-last writes<br/><i>STM32 concrete</i>]
+    GW[TargetGateway → J-Link]
+
+    CDC --> ABI
+    ABI -.implemented by.-> OTG
+    OTG --> GW
 ```
 
-From the peripheral simulator's point of view, this backend still exposes the
-same `TargetGateway` operations.
+- `UsbHostCdcDevice` speaks USB and only knows `UsbHostSimAbi`. It would drive
+  NXP IP3511 or Nordic USBD unchanged.
+- `Stm32OtgFsHostAbi` is the only piece that knows the STM32 block's byte layout.
 
-## Firmware Simulation ABI
+**Rule:** `peripherals/usb_host.py` (CDC + ABC) must not import the concrete
+`usb_host_otgfs.py`.
 
-To mock almost every peripheral, the host should not poke arbitrary peripheral
-registers directly. Instead, the firmware should expose explicit simulation
-blocks in RAM. Each block is a small ABI between the host-side simulator and the
-firmware-side peripheral shim.
+## The MMB: `UsbhSimBlock`
 
-Recommended common header:
+A 16-byte header plus 8 channels (one per USB pipe). Each side owns specific
+fields; the other side only reads them.
 
-```c
-struct sim_block_header {
-    uint32_t magic;
-    uint16_t version;
-    uint16_t size;
-    uint32_t capabilities;
-    uint32_t flags;
-};
+```
+UsbhSimBlock @ 0x2001E000          fixed top-of-RAM address (linker .mmb region)
+├── header (16 B)
+│   magic version block_size        ← firmware publishes (validate handshake)
+│   connected port_* speed          ← host: device presence / port state
+│   reset_req                       ← firmware: "please reset the port"
+│   ev_connect / ev_port_en / ...   ← host sets, then pends IRQ → shim fires callback
+└── ch[8]  (140 B each)             one per pipe
+    ep_addr ep_type ep_dir          ← firmware: pipe identity (from OpenPipe)
+    out_buf / out_len / out_pending ← firmware: a SETUP/OUT the host must service
+    in_buf / xfer_count / in_requested ← host fills an IN the firmware asked for
+    urb_state                       ← host: 0=IDLE 1=DONE 4=ERROR 5=STALL
 ```
 
-Recommended pattern:
+`urb_state` is the completion signal the middleware polls. Data never moves by
+IRQ — only **events** (connect / port-enable / disconnect) use the IRQ path; URB
+data is poll-driven through these fields.
 
-- Each peripheral has one exported symbol, such as `usb_sim`, `uart0_sim`, or
-  `gpio_sim`.
-- Each symbol points to a versioned block with a magic value.
-- The host resolves the symbol, checks `magic`, `version`, and `size`, then
-  drives only fields defined by that ABI.
-- The host wakes firmware by pending an IRQ, setting an event flag, or using a
-  firmware-defined notification mechanism.
+## Channel ↔ pipe map (CDC)
 
-Example USB simulation block:
-
-```c
-struct usb2_sim_block {
-    struct sim_block_header header;
-    uint16_t cntr;
-    uint16_t istr;
-    uint16_t fnr;
-    uint16_t daddr;
-    uint16_t btable;
-    uint16_t ep_reg[8];
-    uint16_t tx_pma_addr[8];
-    uint16_t rx_pma_addr[8];
-    uint16_t tx_count[8];
-    uint8_t pma[512];
-    uint8_t connected;
-    uint8_t remote_wakeup;
-    uint8_t device_address;
-};
+```
+ch0  EP0 OUT 0x00   control SETUP/OUT     ┐ enumeration
+ch1  EP0 IN  0x80   control IN            ┘
+ch2  INTR IN 0x82   CDC notification      (opened, never polled)
+ch3  BULK OUT 0x01  host → device         ┐ data / echo
+ch4  BULK IN  0x81  device → host         ┘
 ```
 
-The exact fields can vary by MCU or USB implementation, but the block should be
-explicit, versioned, and validated at connection time.
+## How a transfer flows
 
-## Transaction Semantics
-
-Peripheral injection often requires several target writes followed by one
-notification. For example, USB OUT injection writes payload bytes, updates an
-endpoint register, updates interrupt status, and then pends the USB IRQ.
-
-The `transaction()` operation gives backends a place to make this sequence
-consistent:
-
-- Batch writes where the backend supports it.
-- Optionally halt the target for sensitive multi-field updates.
-- Resume or leave running according to policy.
-- Fail the whole operation if a required write fails.
-- Emit trace logs for reproducibility.
-
-Peripheral simulators should keep notifications last. This prevents firmware
-from observing a half-written event.
-
-## USB2 Example
+The middleware is the *USB host*; the IO server plays the *device*. Each URB is
+a request the firmware arms in a channel and the host fulfils:
 
 ```mermaid
 sequenceDiagram
-    participant Test as Test Engine
-    participant USB as USB2 Simulator
-    participant TG as Target Gateway
-    participant B as Backend Adapter
-    participant FW as Firmware usb_sim Block
+    participant FW as USB-Host middleware
+    participant CH as MMB channel
+    participant HOST as UsbHostCdcDevice
 
-    Test->>USB: enumerate()
-    USB->>TG: resolve_symbol("usb_sim")
-    TG->>B: backend-specific symbol lookup
-    B-->>TG: base address
-    USB->>TG: transaction(write setup packet, set flags, pend IRQ)
-    TG->>B: memory writes and NVIC write
-    B->>FW: target memory updates
-    USB->>TG: wait_until(EP0 IN ready)
-    TG->>B: memory reads
-    B-->>TG: descriptor bytes
-    TG-->>USB: descriptor bytes
-    USB-->>Test: enumeration result
+    Note over FW,HOST: control IN (e.g. GET_DESCRIPTOR)
+    FW->>CH: SubmitURB → out_buf=SETUP, out_pending=1
+    HOST->>CH: wait_for_out() sees out_pending
+    HOST->>CH: ack_out → out_pending=0, urb_state=DONE (last)
+    FW->>CH: SubmitURB IN → in_requested=1
+    HOST->>CH: provide_in → in_buf, xfer_count, in_requested=0, urb_state=DONE (last)
+    FW->>CH: GetURBState=DONE → copies in_buf to the stack
 ```
 
-Intent-level USB API:
+## The DONE-last ordering rule
 
-```python
-usb.connect()
-usb.reset_bus()
-usb.inject_setup(packet)
-usb.inject_out(endpoint=1, payload=b"test")
-data = usb.read_in(endpoint=1, max_len=64)
-usb.ack_in(endpoint=1)
+`urb_state = DONE` unblocks the middleware's `CTRL_*_WAIT` poll, which
+**immediately re-arms the next URB** on the same channel. Since every gateway
+write is a separate ~ms round-trip, the host must clear the request flag
+(`out_pending` / `in_requested`) and write any payload/count **before** DONE.
+Reverse it and the re-armed request gets stomped, hanging the stack forever.
+
+```
+ack OUT/SETUP : out_pending=0 ; ... ; urb_state=DONE   ← DONE always last
+fulfil IN     : in_buf ; xfer_count ; in_requested=0 ; urb_state=DONE
 ```
 
-Target-level implementation behind that API:
+This is the peripheral-specific shape of the global **notifications-last** rule.
 
-```python
-gateway.write(base + layout.pma + rx_offset, payload)
-gateway.write_u16(base + layout.ep_reg + ep * 2, ep_reg_with_ctr_rx)
-gateway.write_u16(base + layout.istr, istr_with_ctr_and_ep)
-gateway.pend_irq(USB_IRQ_NUMBER)
+## End-to-end: enumerate → echo
+
+```mermaid
+sequenceDiagram
+    participant T as Test
+    participant CDC as UsbHostCdcDevice
+    participant ABI as Stm32OtgFsHostAbi
+    participant FW as Firmware
+
+    T->>CDC: attach()
+    CDC->>ABI: connect + wait/accept port reset (pend IRQ)
+    T->>CDC: enumerate()
+    loop each control transfer
+        CDC->>ABI: wait_for_out → decode SETUP
+        CDC->>ABI: provide_in / ack_out by direction
+    end
+    Note over FW: Appli_state = APPLICATION_READY
+    T->>CDC: wait_and_echo(response)
+    FW->>ABI: bulk-OUT "ping" on ch3
+    CDC->>ABI: ack_out, compute reply
+    CDC->>ABI: provide_in reply on ch4  → firmware RX buffer
 ```
 
-## Suggested Package Shape
+`enumerate()` is a generic per-control-transfer state machine (poll EP0-OUT,
+decode each SETUP, drive the data/status stage by direction), not a fixed
+script — so any standard enumeration order works.
+
+## Package shape
 
 ```text
-wcet_io_server/
-  target/
-    gateway.py
-    symbols.py
-    memory.py
-    capabilities.py
-  backends/
-    openocd.py
-    jlink.py
-    pyocd.py
-    simulator.py
-  peripherals/
-    usb2.py
-    uart.py
-    gpio.py
-    adc.py
-  firmware_abi/
-    common.py
-    usb2.py
-    uart.py
-  scenarios/
-    engine.py
+wcet-io-server/
+  target/       gateway.py  symbols.py  capabilities.py
+  backends/     jlink.py  openocd.py
+  firmware_abi/ usbh_otgfs.py   # MMB offsets, magic, descriptors
+  peripherals/  usb_host.py     # UsbHostSimAbi (ABC) + UsbHostCdcDevice
+                usb_host_otgfs.py  # Stm32OtgFsHostAbi (concrete)
 ```
 
-The existing USB simulator code can move toward this shape by splitting direct
-target access from USB behavior:
+## Design rules
 
-- Keep `USBSimulator` or `Usb2Simulator` as the peripheral-facing model.
-- Move pyOCD/OpenOCD/J-Link details into backend adapters.
-- Replace direct backend calls with a `TargetGateway`.
-- Resolve simulation block addresses through symbols when possible, with a
-  configured fallback address only for early bring-up.
-
-## Design Rules
-
-- Peripheral simulators express intent.
-- Backend adapters express mechanics.
-- OpenOCD probe configuration does not leak above the OpenOCD backend.
-- J-Link is a peer backend to OpenOCD, not a special case inside USB.
-- Firmware simulation blocks are versioned ABI contracts.
-- Notifications happen after all related memory writes.
-- Capability checks happen when a session starts, not halfway through a test.
-- Scenario logs should record backend type, probe, transport, target, firmware
-  ABI versions, and resolved simulation block addresses.
+- Peripheral simulators express intent; backends express mechanics.
+- J-Link is a peer backend, not a special case inside USB.
+- The MMB is a versioned ABI: validate magic/version/size before driving fields.
+- All payload/flag writes happen before the completion signal (DONE-last).
+- The CDC protocol layer never imports the STM32 concrete ABI.
