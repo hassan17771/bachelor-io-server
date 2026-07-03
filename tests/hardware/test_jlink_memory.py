@@ -36,7 +36,7 @@ class JLinkBackendMemoryTest(unittest.TestCase):
     Example test run:
 
         WCET_JLINK_TEST_ADDR=0x20004A38 python3 -m unittest \
-            tests.test_jlink_backend_memory
+            tests.hardware.test_jlink_memory
 
     Choose an address in writable RAM that the running firmware will not modify.
     """

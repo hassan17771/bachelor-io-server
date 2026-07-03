@@ -7,7 +7,7 @@
       "request": "launch",
       "module": "unittest",
       "args": [
-        "tests.test_jlink_backend_memory",
+        "tests.hardware.test_jlink_memory",
         "-v"
       ],
       "cwd": "${workspaceFolder}",

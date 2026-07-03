@@ -7,7 +7,7 @@ us definitively whether the 9-second "hang" is a HardFault (frozen in the fault
 handler) or the middleware spinning/delaying in normal code.
 
     cd wcet-io-server
-    python tests/usb/host/diag_cpu_state.py
+    python tests/hardware/usb/host/diag_cpu_state.py
 
 It does not reset the target, so the stuck state is preserved.
 """
@@ -17,8 +17,8 @@ import os
 import sys
 
 # Standalone script (not collected by pytest, so conftest.py does not run):
-# put the wcet-io-server root (four levels up) on sys.path itself.
-_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+# put the wcet-io-server root on sys.path itself.
+_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 

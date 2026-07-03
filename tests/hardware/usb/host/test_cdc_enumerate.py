@@ -9,7 +9,7 @@ class went active (HOST_USER_CLASS_ACTIVE). Nothing here is mocked.
     # start the J-Link GDB server first, e.g.
     #   JLinkGDBServerCLExe -device STM32F411CE -if SWD -speed 4000 -port 2331
     cd wcet-io-server
-    WCET_USB_HOST_TEST=1 python -m pytest tests/usb/host/test_usb_host_enumerate_4_1.py
+    WCET_USB_HOST_TEST=1 python -m pytest tests/hardware/usb/host/test_cdc_enumerate.py
 
 The enumerate() completion predicate reads the firmware global `Appli_state`
 (usb_host.c). Its address is resolved, in order, from:
@@ -25,7 +25,7 @@ import unittest
 
 # The wcet-io-server root; its parent is the project root holding Debug/ and
 # Release/ (the firmware build outputs used to resolve symbol addresses).
-_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
 _PROJECT = os.path.dirname(_ROOT)
 
 from backends.jlink import JLinkBackend, JLinkConnectionConfig
@@ -68,7 +68,7 @@ class UsbHostCdcEnumerateTest(unittest.TestCase):
 
     Requires a JLinkGDBServerCLExe already attached to the STM32 and firmware
     flashed with the sim shims. Enable with WCET_USB_HOST_TEST=1 (skips
-    otherwise), matching test_usbh_conf_urb_sim.py.
+    otherwise), matching the other hardware tests in this directory.
     """
 
     def setUp(self) -> None:

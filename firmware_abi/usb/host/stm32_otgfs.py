@@ -7,7 +7,8 @@ from dataclasses import dataclass, field
 #
 # Mirrors the C contract in Core/Inc/usbh_sim.h (UsbhSimBlock / UsbhSimChannel).
 # Both sides assert the same sizes/offsets: the firmware via _Static_assert, the
-# Python side via tests/test_usbh_otgfs_abi.py. Keep the two in lock-step.
+# Python side via tests/usb/host/backends/test_stm32_otgfs_layout.py. Keep the
+# two in lock-step.
 
 # --- identity ---------------------------------------------------------------
 

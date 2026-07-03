@@ -8,7 +8,7 @@ actually complete -- this shows whether enumeration progresses past
 GET_DESCRIPTOR(Device,8) and, if not, exactly where and when it stalls.
 
     cd wcet-io-server
-    python tests/usb/host/diag_service_trace.py
+    python tests/hardware/usb/host/diag_service_trace.py
 """
 from __future__ import annotations
 
@@ -17,8 +17,8 @@ import sys
 import time
 
 # Standalone script (not collected by pytest, so conftest.py does not run):
-# put the wcet-io-server root (four levels up) on sys.path itself.
-_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+# put the wcet-io-server root on sys.path itself.
+_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
@@ -152,7 +152,7 @@ def main() -> int:
                         raw = t.read(ch(cn, "out_buf"), min(olen, 16))
                         print(f"[{t0():6.3f}] ch{cn} OUT len={olen} [{raw.hex(' ')}...]")
                     # clear request flag first, signal DONE last (avoids the
-                    # ack/resubmit clobber race -- see test_usbh_conf_urb_sim)
+                    # ack/resubmit clobber race -- see test_urb_shims.py)
                     t.write_u8(ch(cn, "out_pending"), 0)
                     t.write_u8(ch(cn, "urb_state"), URB_DONE)
 
