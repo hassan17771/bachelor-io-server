@@ -23,9 +23,8 @@ from firmware_abi.usbh_otgfs import (
 )
 from target.gateway import TargetGateway
 
-from .usb_host import (
-    DIR_OUT,
-    SPEED_FULL,
+from .usb.common.requests import DIR_OUT, SPEED_FULL
+from .usb.host.abi import (
     ChannelSelector,
     UsbChannelInfo,
     UsbHostSimAbi,
