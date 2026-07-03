@@ -5,19 +5,10 @@ fields in a particular order. That logic can be verified without a J-Link or a
 target by backing the gateway with a plain dict and inspecting what it wrote --
 which is what this helper provides. Hardware behaviour (the middleware actually
 emitting a SETUP) is exercised separately by the live test_usbh_conf_*sim tests.
-
-`tests/usb-host` has a hyphen so it is not an importable package; tests add this
-directory to sys.path and `import fake_mmb_gateway`.
 """
 from __future__ import annotations
 
-import os
-import sys
 from typing import Callable, Optional
-
-_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _ROOT not in sys.path:
-    sys.path.insert(0, _ROOT)
 
 from target.capabilities import BackendCapabilities
 from target.gateway import BaseTargetGateway

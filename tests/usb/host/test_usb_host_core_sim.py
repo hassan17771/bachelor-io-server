@@ -11,17 +11,9 @@ Runs with no J-Link and no target.
 """
 from __future__ import annotations
 
-import os
-import sys
 import unittest
 
-# 'tests/usb-host' has a hyphen, so it is not an importable package. Put the
-# wcet-io-server root (three levels up) on sys.path to run this file directly.
-_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _ROOT not in sys.path:
-    sys.path.insert(0, _ROOT)
-
-from fake_mmb_gateway import FakeMmbGateway, MmbView
+from tests.usb.host.fake_mmb_gateway import FakeMmbGateway, MmbView
 from firmware_abi.usb.host.stm32_otgfs import (
     DEFAULT_USBH_SIM_LAYOUT,
     EP_DIR_IN,

@@ -5,26 +5,17 @@ accept_port_reset against an in-memory MMB (fake_mmb_gateway), so it runs with
 no J-Link and no target attached:
 
     cd wcet-io-server
-    python tests/usb-host/test_usb_host_abi_3_1.py
+    python -m pytest tests/usb/host/test_usb_host_abi_3_1.py
 
 These assert the *Python-side* transport contract -- the exact fields each call
 writes and the events it pends. The matching firmware behaviour is covered by
-the live tests/usb-host/test_usbh_conf_sim.py.
+the live tests/usb/host/test_usbh_conf_sim.py.
 """
 from __future__ import annotations
 
-import os
-import sys
 import unittest
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-if _HERE not in sys.path:
-    sys.path.insert(0, _HERE)
-_ROOT = os.path.dirname(os.path.dirname(_HERE))
-if _ROOT not in sys.path:
-    sys.path.insert(0, _ROOT)
-
-from fake_mmb_gateway import FakeMmbGateway, MmbView
+from tests.usb.host.fake_mmb_gateway import FakeMmbGateway, MmbView
 
 from firmware_abi.usb.host.stm32_otgfs import (
     BLOCK_SIZE,

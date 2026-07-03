@@ -1,40 +1,32 @@
-"""CDC bulk ping/pong against the real target over SWD/J-Link.
+"""Full CDC enumeration against the real target over SWD/J-Link.
 
-This is a HARDWARE test. After enumeration the target firmware (usb_host.c)
-becomes the talker: while the CDC class is active it transmits "ping <n>" on the
-CDC bulk-OUT pipe and receives the reply on the bulk-IN pipe, logging both over
-USART1:
-
-    CDC write: ping 1
-    CDC read: pong 1
-
-This test plays the device side. It enumerates the mock, then services N
-ping/pong rounds with UsbHostCdcDevice.wait_and_echo, answering each "ping <n>"
-with "pong <n>". The firmware only emits ping <n+1> from its receive-complete
-callback -- i.e. after it has consumed pong <n> into its RX buffer -- so seeing
-the ping counter advance 1, 2, 3, ... is proof that every reply reached the
-target's RX buffer. Nothing is mocked.
+This is a HARDWARE test: it drives the actual STM32 USB-host middleware running
+on the target (firmware built with -DUSB_HOST_SIMULATION). It brings
+the simulated port up, runs UsbHostCdcDevice.enumerate(), and asserts the
+firmware reached APPLICATION_READY -- i.e. enumeration completed AND the CDC
+class went active (HOST_USER_CLASS_ACTIVE). Nothing here is mocked.
 
     # start the J-Link GDB server first, e.g.
     #   JLinkGDBServerCLExe -device STM32F411CE -if SWD -speed 4000 -port 2331
     cd wcet-io-server
-    python tests/usb-host/test_usb_host_echo_4_2.py
+    WCET_USB_HOST_TEST=1 python -m pytest tests/usb/host/test_usb_host_enumerate_4_1.py
 
-Watch the firmware's own view of the exchange on the USART1 console (PA15 TX).
+The enumerate() completion predicate reads the firmware global `Appli_state`
+(usb_host.c). Its address is resolved, in order, from:
+  * WCET_APPLI_STATE_ADDR   (e.g. 0x200000f4)
+  * WCET_USB_HOST_ELF       (arm-none-eabi-nm <elf> | grep Appli_state)
+  * the project's Release/ then Debug/ blackUSB.elf
+For the current Release build `Appli_state` is at 0x200000f4 (Debug: 0x200004cc).
 """
 from __future__ import annotations
 
 import os
-import sys
 import unittest
 
-# 'tests/usb-host' has a hyphen, so it is not an importable package. Put the
-# wcet-io-server root (three levels up) on sys.path to run this file directly.
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.dirname(os.path.dirname(_HERE))
-if _ROOT not in sys.path:
-    sys.path.insert(0, _ROOT)
-_PROJECT = os.path.dirname(_ROOT)  # repo root holding Debug/ and Release/
+# The wcet-io-server root; its parent is the project root holding Debug/ and
+# Release/ (the firmware build outputs used to resolve symbol addresses).
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+_PROJECT = os.path.dirname(_ROOT)
 
 from backends.jlink import JLinkBackend, JLinkConnectionConfig
 from firmware_abi.usb.host.stm32_otgfs import (
@@ -52,8 +44,14 @@ from target.symbols import NmSymbolResolver
 NVIC_ISER_BASE = 0xE000E100
 
 # usb_host.c: APPLICATION_READY is enum value 2 (set on HOST_USER_CLASS_ACTIVE).
+APPLICATION_IDLE = 0
+APPLICATION_START = 1
 APPLICATION_READY = 2
+APPLICATION_DISCONNECT = 3
 APPLI_STATE_NAMES = {0: "IDLE", 1: "START", 2: "READY", 3: "DISCONNECT"}
+
+# The first SETUP a CDC enumeration emits: GET_DESCRIPTOR(Device, wLength=8).
+GET_DESCRIPTOR_DEVICE_8 = bytes([0x80, 0x06, 0x00, 0x01, 0x00, 0x00, 0x08, 0x00])
 
 
 def _env_int(name: str, default: int) -> int:
@@ -65,12 +63,12 @@ def _truthy(value: str | None) -> bool:
     return value is not None and value.strip().lower() in {"1", "true", "yes", "on"}
 
 
-class UsbHostCdcEchoTest(unittest.TestCase):
-    """Run the ping/pong exchange end-to-end on the target.
+class UsbHostCdcEnumerateTest(unittest.TestCase):
+    """Run the enumeration end-to-end on the target.
 
     Requires a JLinkGDBServerCLExe already attached to the STM32 and firmware
-    flashed with the sim shims plus the CDC application code. Enable with
-    WCET_USB_HOST_TEST=1 (skips otherwise).
+    flashed with the sim shims. Enable with WCET_USB_HOST_TEST=1 (skips
+    otherwise), matching test_usbh_conf_urb_sim.py.
     """
 
     def setUp(self) -> None:
@@ -159,7 +157,10 @@ class UsbHostCdcEchoTest(unittest.TestCase):
 
     @staticmethod
     def _address_from_map(map_path: str, symbol: str) -> int | None:
-        """Pull a symbol's address out of a GNU ld .map file."""
+        """Pull a symbol's address out of a GNU ld .map file.
+
+        The map lists each symbol as e.g. '  0x00000000200000f4  Appli_state'.
+        """
         if not map_path or not os.path.isfile(map_path):
             return None
         try:
@@ -179,62 +180,57 @@ class UsbHostCdcEchoTest(unittest.TestCase):
     def _appli_state(self) -> int:
         return self.target.read_u8(self.appli_state_addr)
 
-    @staticmethod
-    def _ping_number(payload: bytes) -> int:
-        """Parse the <n> out of a b"ping <n>" payload."""
-        parts = payload.split()
-        return int(parts[1]) if len(parts) >= 2 else -1
-
     # -- the test ------------------------------------------------------------
 
-    def test_cdc_ping_pong_round_trips(self) -> None:
+    def test_enumerate_reaches_application_ready(self) -> None:
         abi = Stm32OtgFsHostAbi(self.target, base_address=self.base, layout=self.layout)
         device = UsbHostCdcDevice(abi)
 
-        # Bring the port up and enumerate to APPLICATION_READY.
+        # Attach the simulated device and bring the port up.
         device.attach(speed=SPEED_FULL, timeout_s=self.timeout_s)
-        device.enumerate(
+
+        # Enumeration has not run yet, so the CDC class cannot be active.
+        self.assertNotEqual(
+            self._appli_state(), APPLICATION_READY,
+            "host reported APPLICATION_READY before enumeration even started",
+        )
+
+        # Service the whole enumeration; finish when the firmware signals the CDC
+        # class is active (APPLICATION_READY).
+        result = device.enumerate(
             done=lambda: self._appli_state() == APPLICATION_READY,
             timeout_s=float(os.environ.get("WCET_USB_HOST_ENUM_TIMEOUT", "20.0")),
         )
-        self.assertEqual(
-            self._appli_state(), APPLICATION_READY,
-            "enumeration did not reach APPLICATION_READY; cannot start the CDC exchange",
+
+        final = self._appli_state()
+        print(
+            "enumeration: "
+            + result.summary()
+            + f"\n  Appli_state = {final} ({APPLI_STATE_NAMES.get(final, '?')})"
+            + f"\n  SETUPs serviced ({len(result.setups)}):"
         )
+        for s in result.setups:
+            print("    " + s.hex(" "))
 
-        rounds = int(os.environ.get("WCET_CDC_ROUNDS", "5"))
-
-        def responder(received: bytes) -> bytes:
-            # Answer "ping <n>" with "pong <n>".
-            parts = received.split()
-            number = parts[1] if len(parts) >= 2 else b"?"
-            return b"pong " + number
-
-        seen_numbers = []
-        for expected_n in range(1, rounds + 1):
-            echo = device.wait_and_echo(responder, timeout_s=10.0)
-            print(f"  MCU->dev {echo.received!r:<16}  dev->MCU {echo.sent!r}")
-
-            self.assertTrue(
-                echo.received.startswith(b"ping "),
-                f"expected a CDC 'ping', got {echo.received!r}",
-            )
-            number = self._ping_number(echo.received)
-            self.assertEqual(
-                number, expected_n,
-                f"ping counter out of order: got {number}, expected {expected_n} "
-                f"({echo.received!r})",
-            )
-            self.assertEqual(echo.sent, b"pong " + str(expected_n).encode())
-            seen_numbers.append(number)
-
-        # Each ping <n+1> is only emitted from the firmware's receive callback,
-        # after it consumed pong <n> -- so a clean 1..rounds sequence is proof the
-        # replies reached the target's RX buffer.
+        # Enumeration completed and the CDC class went active.
         self.assertEqual(
-            seen_numbers, list(range(1, rounds + 1)),
-            f"firmware did not advance the ping counter cleanly: {seen_numbers}",
+            final, APPLICATION_READY,
+            f"Appli_state did not reach APPLICATION_READY (got {final}); {result.summary()}",
         )
+        self.assertTrue(result.completed)
+
+        # Sanity on the sequence the stack actually drove.
+        self.assertEqual(
+            result.setups[0], GET_DESCRIPTOR_DEVICE_8,
+            f"first SETUP was {result.setups[0].hex(' ')}, expected GET_DESCRIPTOR(Device,8)",
+        )
+        self.assertEqual(result.address, 1, "host should have assigned device address 1")
+        self.assertTrue(result.set_configuration, "host should have issued SET_CONFIGURATION")
+        self.assertTrue(result.got_line_coding, "CDC class should have issued GET_LINE_CODING")
+
+        # With the data pipes now open, the CDC bulk endpoints should be visible.
+        bulk_in = abi.channel_info(4)
+        self.assertEqual(bulk_in.endpoint, 0x81, "channel 4 should be the CDC bulk IN endpoint")
 
 
 if __name__ == "__main__":

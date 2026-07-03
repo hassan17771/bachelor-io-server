@@ -1,16 +1,7 @@
 from __future__ import annotations
 
 import os
-import sys
 import unittest
-
-# 'tests/usb-host' has a hyphen, so it is not an importable package and
-# `python -m unittest discover` cannot traverse it. Put the wcet-io-server root
-# (three levels up) on sys.path so the file runs directly:
-#   python tests/usb-host/test_usbh_conf_sim.py
-_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _ROOT not in sys.path:
-    sys.path.insert(0, _ROOT)
 
 from backends.jlink import JLinkBackend, JLinkConnectionConfig
 from firmware_abi.usb.host.stm32_otgfs import (

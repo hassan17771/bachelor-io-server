@@ -8,7 +8,7 @@ actually complete -- this shows whether enumeration progresses past
 GET_DESCRIPTOR(Device,8) and, if not, exactly where and when it stalls.
 
     cd wcet-io-server
-    python tests/usb-host/diag_service_trace.py
+    python tests/usb/host/diag_service_trace.py
 """
 from __future__ import annotations
 
@@ -16,7 +16,9 @@ import os
 import sys
 import time
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Standalone script (not collected by pytest, so conftest.py does not run):
+# put the wcet-io-server root (four levels up) on sys.path itself.
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 

@@ -1,10 +1,8 @@
 """Pytest bootstrap for the wcet-io-server repo.
 
 Puts the repo root on sys.path once, centrally, so test files can import
-`backends`, `firmware_abi`, `peripherals`, and `target` without each file
-doing its own sys.path.insert dance. (tests/usb-host has a hyphen in its
-name and is not an importable package, so pytest's rootdir handling alone
-does not cover it.)
+`backends`, `firmware_abi`, `peripherals`, `target`, and the `tests` package
+without each file doing its own sys.path.insert dance.
 """
 from __future__ import annotations
 
