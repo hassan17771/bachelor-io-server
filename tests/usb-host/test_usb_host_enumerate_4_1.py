@@ -70,13 +70,13 @@ class UsbHostCdcEnumerateTest(unittest.TestCase):
     """Run the enumeration end-to-end on the target.
 
     Requires a JLinkGDBServerCLExe already attached to the STM32 and firmware
-    flashed with the sim shims. (Uncomment the guard below to make it opt-in via
-    WCET_USB_HOST_TEST=1, matching test_usbh_conf_urb_sim.py.)
+    flashed with the sim shims. Enable with WCET_USB_HOST_TEST=1 (skips
+    otherwise), matching test_usbh_conf_urb_sim.py.
     """
 
     def setUp(self) -> None:
-        # if not _truthy(os.environ.get("WCET_USB_HOST_TEST")):
-        #     raise unittest.SkipTest("set WCET_USB_HOST_TEST=1 to run the USB host hardware test")
+        if not _truthy(os.environ.get("WCET_USB_HOST_TEST")):
+            raise unittest.SkipTest("set WCET_USB_HOST_TEST=1 to run the USB host hardware test")
 
         self.layout = DEFAULT_USBH_SIM_LAYOUT
         self.base = resolve_usbh_sim_base()

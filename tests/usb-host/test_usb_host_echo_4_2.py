@@ -60,14 +60,22 @@ def _env_int(name: str, default: int) -> int:
     return default if value is None else int(value, 0)
 
 
+def _truthy(value: str | None) -> bool:
+    return value is not None and value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 class UsbHostCdcEchoTest(unittest.TestCase):
     """Run the ping/pong exchange end-to-end on the target.
 
     Requires a JLinkGDBServerCLExe already attached to the STM32 and firmware
-    flashed with the sim shims plus the CDC application code.
+    flashed with the sim shims plus the CDC application code. Enable with
+    WCET_USB_HOST_TEST=1 (skips otherwise).
     """
 
     def setUp(self) -> None:
+        if not _truthy(os.environ.get("WCET_USB_HOST_TEST")):
+            raise unittest.SkipTest("set WCET_USB_HOST_TEST=1 to run the USB host hardware test")
+
         self.layout = DEFAULT_USBH_SIM_LAYOUT
         self.base = resolve_usbh_sim_base()
         self.timeout_s = float(os.environ.get("WCET_USB_HOST_TIMEOUT", "3.0"))

@@ -71,8 +71,8 @@ class UsbhConfUrbSimTest(unittest.TestCase):
     """
 
     def setUp(self) -> None:
-        # if not _truthy(os.environ.get("WCET_USB_HOST_TEST")):
-        #     raise unittest.SkipTest("set WCET_USB_HOST_TEST=1 to run the USB host hardware test")
+        if not _truthy(os.environ.get("WCET_USB_HOST_TEST")):
+            raise unittest.SkipTest("set WCET_USB_HOST_TEST=1 to run the USB host hardware test")
 
         self.layout = DEFAULT_USBH_SIM_LAYOUT
         self.base = resolve_usbh_sim_base()
