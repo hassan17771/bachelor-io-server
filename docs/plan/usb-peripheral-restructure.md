@@ -1,6 +1,6 @@
 # Plan: USB / peripheral / firmware-ABI folder restructure
 
-Status: proposed, not started. Companion to
+Status: in progress — Phases 0 and 1 done (2026-07-03), Phase 2 next. Companion to
 [`test-engine-config-yaml.md`](test-engine-config-yaml.md) (that plan consumes
 the module paths this one produces — see its "Depends on" note).
 
@@ -100,12 +100,12 @@ acceptance check for that task, not a suggestion.
 
 ### Phase 0 — safety net
 
-- [ ] **0.1 — Add a root `conftest.py`.** Puts the repo root on `sys.path`
+- [x] **0.1 — Add a root `conftest.py`.** Puts the repo root on `sys.path`
       once, centrally, instead of each test file doing its own
       `sys.path.insert` dance. No behavior change.
       Verify: `pytest` from repo root still collects and runs every existing
       test file, including the ones under the hyphenated `tests/usb-host/`.
-- [ ] **0.2 — Make hardware tests opt-in and skip by default.** Several
+- [x] **0.2 — Make hardware tests opt-in and skip by default.** Several
       existing tests (`test_usb_host_enumerate_4_1.py`, ...) connect to a
       real J-Link/target in `setUp()` unconditionally — some have the
       `WCET_*_TEST=1` skip guard already written but commented out.
@@ -118,12 +118,12 @@ acceptance check for that task, not a suggestion.
 
 ### Phase 1 — eliminate `usb2` (deprecated, non-functional device-mode code)
 
-- [ ] **1.1 — Delete the implementation files.** Remove
+- [x] **1.1 — Delete the implementation files.** Remove
       `peripherals/usb2.py` and `firmware_abi/usb2.py`.
-- [ ] **1.2 — Delete the test file.** Remove `tests/test_usb2_cdc_jlink.py`.
-- [ ] **1.3 — Remove the `.vscode/launch.json` entry** that runs
+- [x] **1.2 — Delete the test file.** Remove `tests/test_usb2_cdc_jlink.py`.
+- [x] **1.3 — Remove the `.vscode/launch.json` entry** that runs
       `tests.test_usb2_cdc_jlink` (line 51 today).
-- [ ] **1.4 — Clean up the re-exports.** `peripherals/__init__.py` currently
+- [x] **1.4 — Clean up the re-exports.** `peripherals/__init__.py` currently
       imports `Usb2CdcMockHost, Usb2Simulator` from `.usb2` and lists them in
       `__all__`; `firmware_abi/__init__.py` currently imports
       `DEFAULT_USB2_SIM_CONFIG, EnumerationResult, Usb2Packet, Usb2SimConfig,
