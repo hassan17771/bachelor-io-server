@@ -1,4 +1,4 @@
-from .usbh_otgfs import (
+from .usb.host.stm32_otgfs import (
     CDC_CONFIGURATION_DESCRIPTOR,
     CDC_DEVICE_DESCRIPTOR,
     CDC_LINE_CODING_115200_8N1,

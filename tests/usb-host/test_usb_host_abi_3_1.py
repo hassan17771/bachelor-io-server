@@ -26,7 +26,7 @@ if _ROOT not in sys.path:
 
 from fake_mmb_gateway import FakeMmbGateway, MmbView
 
-from firmware_abi.usbh_otgfs import (
+from firmware_abi.usb.host.stm32_otgfs import (
     BLOCK_SIZE,
     DEFAULT_USBH_SIM_LAYOUT,
     OTG_FS_IRQn,
@@ -35,7 +35,7 @@ from firmware_abi.usbh_otgfs import (
     USBH_SIM_VERSION,
 )
 from peripherals.usb_host import SPEED_FULL, UsbHostSimError
-from peripherals.usb_host_otgfs import Stm32OtgFsHostAbi
+from peripherals.usb.host.backends.stm32_otgfs import Stm32OtgFsHostAbi
 from target.gateway import TargetTimeoutError
 
 

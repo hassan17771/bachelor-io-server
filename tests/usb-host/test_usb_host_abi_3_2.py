@@ -25,7 +25,7 @@ if _ROOT not in sys.path:
 
 from fake_mmb_gateway import FakeMmbGateway, MmbView
 
-from firmware_abi.usbh_otgfs import (
+from firmware_abi.usb.host.stm32_otgfs import (
     BUF_SIZE,
     CDC_DEVICE_DESCRIPTOR,
     DEFAULT_USBH_SIM_LAYOUT,
@@ -38,7 +38,7 @@ from firmware_abi.usbh_otgfs import (
     USBH_SIM_BASE,
 )
 from peripherals.usb_host import UsbOutPacket
-from peripherals.usb_host_otgfs import Stm32OtgFsHostAbi
+from peripherals.usb.host.backends.stm32_otgfs import Stm32OtgFsHostAbi
 from target.gateway import TargetTimeoutError
 
 # The first SETUP CDC enumeration emits: GET_DESCRIPTOR(Device, wLength=8).

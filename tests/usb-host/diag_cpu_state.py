@@ -21,7 +21,7 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from backends.jlink import JLinkBackend, JLinkConnectionConfig
-from firmware_abi.usbh_otgfs import DEFAULT_USBH_SIM_LAYOUT, resolve_usbh_sim_base
+from firmware_abi.usb.host.stm32_otgfs import DEFAULT_USBH_SIM_LAYOUT, resolve_usbh_sim_base
 
 # --- STM32 USB Host middleware state (read straight from hUsbHostFS) ----------
 # hUsbHostFS lives at a fixed .bss address (see Release/blackUSB.map). The handle

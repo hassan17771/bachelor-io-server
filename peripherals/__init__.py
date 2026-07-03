@@ -10,7 +10,7 @@ from .usb_host import (
     UsbHostSimStatus,
     UsbOutPacket,
 )
-from .usb_host_otgfs import Stm32OtgFsHostAbi
+from .usb.host.backends.stm32_otgfs import Stm32OtgFsHostAbi
 
 __all__ = [
     "CdcDeviceProfile",

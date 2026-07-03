@@ -21,7 +21,7 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from backends.jlink import JLinkBackend, JLinkConnectionConfig
-from firmware_abi.usbh_otgfs import (
+from firmware_abi.usb.host.stm32_otgfs import (
     CDC_CONFIGURATION_DESCRIPTOR,
     CDC_DEVICE_DESCRIPTOR,
     CDC_LINE_CODING_115200_8N1,

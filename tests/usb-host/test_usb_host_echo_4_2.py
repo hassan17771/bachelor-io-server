@@ -37,14 +37,14 @@ if _ROOT not in sys.path:
 _PROJECT = os.path.dirname(_ROOT)  # repo root holding Debug/ and Release/
 
 from backends.jlink import JLinkBackend, JLinkConnectionConfig
-from firmware_abi.usbh_otgfs import (
+from firmware_abi.usb.host.stm32_otgfs import (
     DEFAULT_USBH_SIM_LAYOUT,
     OTG_FS_IRQn,
     USBH_SIM_MAGIC,
     resolve_usbh_sim_base,
 )
 from peripherals.usb_host import SPEED_FULL, UsbHostCdcDevice
-from peripherals.usb_host_otgfs import Stm32OtgFsHostAbi
+from peripherals.usb.host.backends.stm32_otgfs import Stm32OtgFsHostAbi
 from target.gateway import TargetError
 from target.symbols import NmSymbolResolver
 

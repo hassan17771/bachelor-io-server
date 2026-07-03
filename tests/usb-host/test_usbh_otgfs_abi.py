@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from firmware_abi.usbh_otgfs import (
+from firmware_abi.usb.host.stm32_otgfs import (
     BLOCK_HEADER_SIZE,
     BLOCK_SIZE,
     CDC_CONFIGURATION_DESCRIPTOR,

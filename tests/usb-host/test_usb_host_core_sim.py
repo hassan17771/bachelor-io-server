@@ -22,7 +22,7 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from fake_mmb_gateway import FakeMmbGateway, MmbView
-from firmware_abi.usbh_otgfs import (
+from firmware_abi.usb.host.stm32_otgfs import (
     DEFAULT_USBH_SIM_LAYOUT,
     EP_DIR_IN,
     EP_DIR_OUT,
@@ -33,7 +33,7 @@ from firmware_abi.usbh_otgfs import (
     USBH_SIM_BASE,
 )
 from peripherals.usb.host.core import ControlTransferLog, UsbHostCore
-from peripherals.usb_host_otgfs import Stm32OtgFsHostAbi
+from peripherals.usb.host.backends.stm32_otgfs import Stm32OtgFsHostAbi
 
 CTRL_OUT_CH = 0
 CTRL_IN_CH = 1

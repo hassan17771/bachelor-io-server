@@ -1,7 +1,7 @@
 """STM32 OTG_FS concrete implementation of :class:`UsbHostSimAbi`.
 
 Translates the portable host-sim operations into reads/writes of the
-``UsbhSimBlock`` MMB (see firmware_abi/usbh_otgfs.py and Core/Inc/usbh_sim.h).
+``UsbhSimBlock`` MMB (see firmware_abi/usb/host/stm32_otgfs.py and Core/Inc/usbh_sim.h).
 Everything STM32-specific about the USB-host mock lives here; the protocol layer
 in usb_host.py never sees an offset or an OTG_FS detail.
 """
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from firmware_abi.usbh_otgfs import (
+from firmware_abi.usb.host.stm32_otgfs import (
     BLOCK_SIZE,
     BUF_SIZE,
     DEFAULT_USBH_SIM_LAYOUT,
@@ -23,8 +23,8 @@ from firmware_abi.usbh_otgfs import (
 )
 from target.gateway import TargetGateway
 
-from .usb.common.requests import DIR_OUT, SPEED_FULL
-from .usb.host.abi import (
+from peripherals.usb.common.requests import DIR_OUT, SPEED_FULL
+from peripherals.usb.host.abi import (
     ChannelSelector,
     UsbChannelInfo,
     UsbHostSimAbi,
