@@ -1,7 +1,8 @@
 """Stm32OtgFsHostAbi per-transfer servicing.
 
 Verifies wait_for_out / provide_in / ack_out / channel_info against an
-in-memory MMB (fake_mmb_gateway), so it runs with no J-Link and no target:
+in-memory MMB (tests.support.fake_gateway), so it runs with no J-Link and no
+target:
 
     cd wcet-io-server
     python -m pytest tests/usb/host/test_usb_host_abi_3_2.py
@@ -14,7 +15,7 @@ from __future__ import annotations
 
 import unittest
 
-from tests.usb.host.fake_mmb_gateway import FakeMmbGateway, MmbView
+from tests.support.fake_gateway import FakeMmbGateway, MmbView
 
 from firmware_abi.usb.host.stm32_otgfs import (
     BUF_SIZE,

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import unittest
 
-from tests.usb.host.fake_mmb_gateway import FakeMmbGateway, MmbView
+from tests.support.fake_gateway import FakeMmbGateway, MmbView
 from firmware_abi.usb.host.stm32_otgfs import (
     DEFAULT_USBH_SIM_LAYOUT,
     EP_DIR_IN,

@@ -1,8 +1,8 @@
 """Stm32OtgFsHostAbi lifecycle/port methods.
 
 Verifies validate / connect / disconnect / wait_for_port_reset /
-accept_port_reset against an in-memory MMB (fake_mmb_gateway), so it runs with
-no J-Link and no target attached:
+accept_port_reset against an in-memory MMB (tests.support.fake_gateway), so it
+runs with no J-Link and no target attached:
 
     cd wcet-io-server
     python -m pytest tests/usb/host/test_usb_host_abi_3_1.py
@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import unittest
 
-from tests.usb.host.fake_mmb_gateway import FakeMmbGateway, MmbView
+from tests.support.fake_gateway import FakeMmbGateway, MmbView
 
 from firmware_abi.usb.host.stm32_otgfs import (
     BLOCK_SIZE,
