@@ -2,8 +2,9 @@
 
 Translates the portable host-sim operations into reads/writes of the
 ``UsbhSimBlock`` MMB (see firmware_abi/usb/host/stm32_otgfs.py and Core/Inc/usbh_sim.h).
-Everything STM32-specific about the USB-host mock lives here; the protocol layer
-in usb_host.py never sees an offset or an OTG_FS detail.
+Everything STM32-specific about the USB-host mock lives here; the protocol
+layer (``peripherals/usb/host/core.py`` and the class drivers on top of it)
+never sees an offset or an OTG_FS detail.
 """
 from __future__ import annotations
 

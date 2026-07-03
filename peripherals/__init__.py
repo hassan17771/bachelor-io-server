@@ -1,16 +1,19 @@
-from .usb_host import (
-    CdcDeviceProfile,
-    CdcEcho,
-    EnumerationError,
-    EnumerationResult,
+from .usb.host.abi import (
     UsbChannelInfo,
-    UsbHostCdcDevice,
     UsbHostSimAbi,
     UsbHostSimError,
     UsbHostSimStatus,
     UsbOutPacket,
 )
 from .usb.host.backends.stm32_otgfs import Stm32OtgFsHostAbi
+from .usb.host.cdc import (
+    CdcDeviceProfile,
+    CdcEcho,
+    EnumerationError,
+    EnumerationResult,
+    UsbHostCdcDevice,
+)
+from .usb.host.core import UsbHostCore
 
 __all__ = [
     "CdcDeviceProfile",
@@ -19,6 +22,7 @@ __all__ = [
     "EnumerationResult",
     "UsbChannelInfo",
     "UsbHostCdcDevice",
+    "UsbHostCore",
     "UsbHostSimAbi",
     "UsbHostSimError",
     "UsbHostSimStatus",

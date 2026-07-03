@@ -34,7 +34,8 @@ from firmware_abi.usb.host.stm32_otgfs import (
     USBH_SIM_MAGIC,
     USBH_SIM_VERSION,
 )
-from peripherals.usb_host import SPEED_FULL, UsbHostSimError
+from peripherals.usb.common.requests import SPEED_FULL
+from peripherals.usb.host.abi import UsbHostSimError
 from peripherals.usb.host.backends.stm32_otgfs import Stm32OtgFsHostAbi
 from target.gateway import TargetTimeoutError
 

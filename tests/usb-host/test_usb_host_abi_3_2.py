@@ -37,7 +37,7 @@ from firmware_abi.usb.host.stm32_otgfs import (
     URB_IDLE,
     USBH_SIM_BASE,
 )
-from peripherals.usb_host import UsbOutPacket
+from peripherals.usb.host.abi import UsbOutPacket
 from peripherals.usb.host.backends.stm32_otgfs import Stm32OtgFsHostAbi
 from target.gateway import TargetTimeoutError
 

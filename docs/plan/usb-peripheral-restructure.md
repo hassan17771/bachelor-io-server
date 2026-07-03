@@ -1,6 +1,6 @@
 # Plan: USB / peripheral / firmware-ABI folder restructure
 
-Status: in progress — Phases 0 and 1 done (2026-07-03), Phase 2 next. Companion to
+Status: in progress — Phases 0-2 done (2026-07-03), Phase 3 next. Companion to
 [`test-engine-config-yaml.md`](test-engine-config-yaml.md) (that plan consumes
 the module paths this one produces — see its "Depends on" note).
 
@@ -134,7 +134,7 @@ acceptance check for that task, not a suggestion.
 
 ### Phase 2 — host-mode restructuring
 
-- [ ] **2.1 — `peripherals/usb/common/requests.py`.** Move the
+- [x] **2.1 — `peripherals/usb/common/requests.py`.** Move the
       protocol-generic constants out of `usb_host.py`: `DIR_OUT`/`DIR_IN`,
       `EP_TYPE_*`, `SPEED_*`, `USB_REQ_GET_DESCRIPTOR`/`SET_ADDRESS`/
       `SET_CONFIGURATION`, `DESC_DEVICE`/`CONFIGURATION`/`STRING`,
@@ -142,11 +142,11 @@ acceptance check for that task, not a suggestion.
       constants (`CDC_GET_LINE_CODING` and friends, the descriptor byte
       blobs) stay behind — they move with the CDC driver in Task 2.4.
       Verify: full suite green; constant values unchanged.
-- [ ] **2.2 — `peripherals/usb/host/abi.py`.** Move `UsbHostSimAbi` (ABC),
+- [x] **2.2 — `peripherals/usb/host/abi.py`.** Move `UsbHostSimAbi` (ABC),
       `UsbOutPacket`, `UsbChannelInfo`, `UsbHostSimStatus`, `UsbHostSimError`
       out of `usb_host.py` verbatim. Update `usb_host_otgfs.py`'s imports.
       Verify: full suite green (pure move).
-- [ ] **2.3 — `peripherals/usb/host/core.py`: `UsbHostCore`.** Extract the
+- [x] **2.3 — `peripherals/usb/host/core.py`: `UsbHostCore`.** Extract the
       protocol-generic half of `UsbHostCdcDevice`: `attach()`, the
       SETUP-poll-and-dispatch loop (today inlined in `enumerate()`,
       generalized to `service_control_transfers(responder, done, timeout_s)`
@@ -156,7 +156,7 @@ acceptance check for that task, not a suggestion.
       Verify: new unit tests (via the existing `FakeMmbGateway` double)
       exercise the control-transfer engine with a stub `responder`, proving
       it needs no CDC knowledge to pass.
-- [ ] **2.4 — `peripherals/usb/host/cdc.py`: `UsbHostCdcDevice(UsbHostCore)`.**
+- [x] **2.4 — `peripherals/usb/host/cdc.py`: `UsbHostCdcDevice(UsbHostCore)`.**
       What's left after 2.1/2.3: CDC request constants, profile/descriptor
       defaults, `_respond()`, `wait_and_echo()` rebuilt on
       `Core.bulk_out`/`bulk_in`. Highest-risk task in this plan — behavior
@@ -166,11 +166,11 @@ acceptance check for that task, not a suggestion.
       `test_usb_host_abi_3_2.py`, `test_usb_host_connection.py`, plus the
       opt-in hardware tests `test_usb_host_enumerate_4_1.py` /
       `test_usb_host_echo_4_2.py`) passes unmodified in behavior.
-- [ ] **2.5 — Move `usb_host_otgfs.py` → `peripherals/usb/host/backends/stm32_otgfs.py`,
+- [x] **2.5 — Move `usb_host_otgfs.py` → `peripherals/usb/host/backends/stm32_otgfs.py`,
       and `firmware_abi/usbh_otgfs.py` → `firmware_abi/usb/host/stm32_otgfs.py`.**
       Pure move + import updates.
       Verify: full suite green.
-- [ ] **2.6 — Delete `peripherals/usb_host.py`.** Everything in it has moved
+- [x] **2.6 — Delete `peripherals/usb_host.py`.** Everything in it has moved
       to 2.1–2.4. Update `peripherals/__init__.py` / `firmware_abi/__init__.py`
       re-exports to the new paths.
       Verify: full suite green; `grep -rn "usb_host\.py\|usbh_otgfs\.py"`
