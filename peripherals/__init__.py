@@ -1,4 +1,3 @@
-from .usb2 import Usb2CdcMockHost, Usb2Simulator
 from .usb_host import (
     CdcDeviceProfile,
     CdcEcho,
@@ -14,8 +13,6 @@ from .usb_host import (
 from .usb_host_otgfs import Stm32OtgFsHostAbi
 
 __all__ = [
-    "Usb2CdcMockHost",
-    "Usb2Simulator",
     "CdcDeviceProfile",
     "CdcEcho",
     "EnumerationError",

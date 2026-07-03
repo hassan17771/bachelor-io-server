@@ -1,13 +1,3 @@
-from .usb2 import (
-    DEFAULT_USB2_SIM_CONFIG,
-    EnumerationResult,
-    Usb2Packet,
-    Usb2SimConfig,
-    Usb2SimLayout,
-    Usb2SimStatus,
-    UsbIstr,
-    UsbSetupPacket,
-)
 from .usbh_otgfs import (
     CDC_CONFIGURATION_DESCRIPTOR,
     CDC_DEVICE_DESCRIPTOR,
@@ -23,14 +13,6 @@ from .usbh_otgfs import (
 )
 
 __all__ = [
-    "DEFAULT_USB2_SIM_CONFIG",
-    "EnumerationResult",
-    "Usb2Packet",
-    "Usb2SimConfig",
-    "Usb2SimLayout",
-    "Usb2SimStatus",
-    "UsbIstr",
-    "UsbSetupPacket",
     "CDC_CONFIGURATION_DESCRIPTOR",
     "CDC_DEVICE_DESCRIPTOR",
     "CDC_LINE_CODING_115200_8N1",
