@@ -22,22 +22,30 @@ from typing import Callable, Dict, Iterable, List, Mapping, Optional, Union
 
 from target.gateway import TargetTimeoutError
 
-# --- generic USB constants (standard, not MCU-specific) ---------------------
-
-# Endpoint direction, as encoded in the MMB ep_dir field and bit 7 of bEndpointAddress.
-DIR_OUT = 0
-DIR_IN = 1
-
-# Transfer types, matching the USB bmAttributes encoding.
-EP_TYPE_CTRL = 0
-EP_TYPE_ISOC = 1
-EP_TYPE_BULK = 2
-EP_TYPE_INTR = 3
-
-# Port speed values the MMB carries (mirror USBH_SpeedTypeDef: FS == 1).
-SPEED_HIGH = 0
-SPEED_FULL = 1
-SPEED_LOW = 2
+# Protocol-generic USB constants live in peripherals.usb.common.requests;
+# re-imported here so existing importers keep working until this file's
+# contents finish moving into peripherals/usb/host/.
+from peripherals.usb.common.requests import (  # noqa: F401
+    DESC_CONFIGURATION,
+    DESC_DEVICE,
+    DESC_STRING,
+    DIR_IN,
+    DIR_OUT,
+    EP_TYPE_BULK,
+    EP_TYPE_CTRL,
+    EP_TYPE_INTR,
+    EP_TYPE_ISOC,
+    REQ_DIR_DEVICE_TO_HOST,
+    REQ_TYPE_CLASS,
+    REQ_TYPE_MASK,
+    REQ_TYPE_STANDARD,
+    SPEED_FULL,
+    SPEED_HIGH,
+    SPEED_LOW,
+    USB_REQ_GET_DESCRIPTOR,
+    USB_REQ_SET_ADDRESS,
+    USB_REQ_SET_CONFIGURATION,
+)
 
 ChannelSelector = Union[int, Iterable[int]]
 
@@ -137,23 +145,7 @@ class UsbHostSimAbi(ABC):
         """Report the endpoint a pipe was opened for."""
 
 
-# --- standard USB / CDC control-request encoding ----------------------------
-
-# Standard device requests (USB 2.0 sec 9.4) carried in the SETUP bRequest.
-USB_REQ_SET_ADDRESS = 0x05
-USB_REQ_GET_DESCRIPTOR = 0x06
-USB_REQ_SET_CONFIGURATION = 0x09
-
-# GET_DESCRIPTOR descriptor types (wValue high byte).
-DESC_DEVICE = 0x01
-DESC_CONFIGURATION = 0x02
-DESC_STRING = 0x03
-
-# bmRequestType fields (SETUP byte 0).
-REQ_DIR_DEVICE_TO_HOST = 0x80          # bit 7 set: device -> host data stage
-REQ_TYPE_MASK = 0x60                   # bits 6:5: standard / class / vendor
-REQ_TYPE_STANDARD = 0x00
-REQ_TYPE_CLASS = 0x20
+# --- CDC control-request encoding --------------------------------------------
 
 # CDC PSTN class-specific requests (CDC120 / PSTN120 sec 6.3).
 CDC_GET_LINE_CODING = 0x21
