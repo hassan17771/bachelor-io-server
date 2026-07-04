@@ -19,7 +19,7 @@ runs over J-Link or OpenOCD, and a backend never learns what a SETUP packet is.
 ```mermaid
 flowchart TD
     Engine[Test Engine / Scenario]
-    Peripherals[Peripheral Simulators<br/>USB-host, USB2, UART, GPIO, ADC...]
+    Peripherals[Peripheral Simulators<br/>USB-host, UART, GPIO, ADC...]
     Gateway[TargetGateway API<br/>memory · IRQ · reset · run-control · symbols]
     Backend[Backend Adapter<br/>J-Link · OpenOCD · pyOCD · simulator]
     Server[Debug Server<br/>JLinkGDBServer · OpenOCD]
@@ -109,6 +109,13 @@ This is the first full peripheral built on the model above: the host mocks a
 **USB CDC-ACM device** so the STM32 OTG_FS **USB-Host** middleware enumerates and
 talks to it with no physical device attached.
 
+**Host mode is the only USB mechanism the IO server supports.** The MCU is
+always the USB host and the IO server always plays the device. There is no
+device-mode mocking (MCU as device, IO server as host) — an early attempt at
+it (`usb2`) was deprecated, never functional, and has been deleted. If
+device-mode is ever wanted, it gets designed fresh, not derived from this
+layer.
+
 ## Two orthogonal abstractions
 
 The USB-host stack factors into a portable half and an MCU-specific half — the
@@ -116,22 +123,30 @@ same split as Peripheral/Backend, applied inside the peripheral:
 
 ```mermaid
 flowchart TD
-    CDC[UsbHostCdcDevice<br/>CDC protocol · enumerate · echo<br/><i>MCU-agnostic</i>]
+    CDC[UsbHostCdcDevice<br/>CDC protocol constants · line coding · echo<br/><i>class driver</i>]
+    CORE[UsbHostCore<br/>attach · control-transfer engine · bulk/intr primitives<br/><i>class-agnostic, MCU-agnostic</i>]
     ABI[UsbHostSimAbi  ABC<br/>connect · wait_for_out · provide_in · ack_out<br/><i>abstract per-MCU contract</i>]
     OTG[Stm32OtgFsHostAbi<br/>OTG_FS MMB offsets · DONE-last writes<br/><i>STM32 concrete</i>]
     GW[TargetGateway → J-Link]
 
-    CDC --> ABI
+    CDC --> CORE --> ABI
     ABI -.implemented by.-> OTG
     OTG --> GW
 ```
 
-- `UsbHostCdcDevice` speaks USB and only knows `UsbHostSimAbi`. It would drive
-  NXP IP3511 or Nordic USBD unchanged.
+- `UsbHostCore` is the generic engine: it services control transfers through a
+  pluggable `responder` and wraps the bulk/interrupt primitives. A future
+  MSC/HID driver subclasses it the way CDC does.
+- `UsbHostCdcDevice(UsbHostCore)` adds only the CDC-specific parts. Both speak
+  to hardware solely through `UsbHostSimAbi` — they would drive NXP IP3511 or
+  Nordic USBD unchanged.
 - `Stm32OtgFsHostAbi` is the only piece that knows the STM32 block's byte layout.
 
-**Rule:** `peripherals/usb_host.py` (CDC + ABC) must not import the concrete
-`usb_host_otgfs.py`.
+**Rule:** the generic layer (`peripherals/usb/host/abi.py`, `core.py`,
+`cdc.py`) must not import `peripherals/usb/host/backends/*`, and
+`peripherals/usb/common/*` must not import `peripherals/usb/host/*`. This is
+enforced, not convention: `tests/test_architecture_boundaries.py` fails on any
+violating import.
 
 ## The MMB: `UsbhSimBlock`
 
@@ -234,9 +249,24 @@ script — so any standard enumeration order works.
 wcet-io-server/
   target/       gateway.py  symbols.py  capabilities.py
   backends/     jlink.py  openocd.py
-  firmware_abi/ usbh_otgfs.py   # MMB offsets, magic, descriptors
-  peripherals/  usb_host.py     # UsbHostSimAbi (ABC) + UsbHostCdcDevice
-                usb_host_otgfs.py  # Stm32OtgFsHostAbi (concrete)
+  firmware_abi/
+    usb/host/
+      stm32_otgfs.py            # MMB offsets, magic, descriptors
+  peripherals/
+    usb/
+      common/
+        requests.py             # USB 2.0 ch.9 constants -- class-agnostic
+      host/
+        abi.py                  # UsbHostSimAbi (ABC) -- per-MCU contract
+        core.py                 # UsbHostCore -- control/bulk engine
+        cdc.py                  # UsbHostCdcDevice(UsbHostCore) -- CDC driver
+        backends/
+          stm32_otgfs.py        # Stm32OtgFsHostAbi (concrete)
+  tests/
+    usb/...                     # unit tests (FakeMmbGateway, no hardware)
+    hardware/usb/...            # opt-in J-Link tests (WCET_USB_HOST_TEST=1)
+    support/                    # fake_gateway.py, hardware.py (shared fixture)
+    test_architecture_boundaries.py  # enforces the import rules above
 ```
 
 ## Design rules
@@ -245,4 +275,7 @@ wcet-io-server/
 - J-Link is a peer backend, not a special case inside USB.
 - The MMB is a versioned ABI: validate magic/version/size before driving fields.
 - All payload/flag writes happen before the completion signal (DONE-last).
-- The CDC protocol layer never imports the STM32 concrete ABI.
+- The generic USB layers (`common/`, `abi.py`, `core.py`, `cdc.py`) never
+  import a concrete backend — enforced by `tests/test_architecture_boundaries.py`.
+- USB host-mode is the only supported USB mechanism; there is no device-mode
+  mocking.

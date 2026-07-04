@@ -1,6 +1,6 @@
 # Plan: USB / peripheral / firmware-ABI folder restructure
 
-Status: in progress — Phases 0-3 done (2026-07-04), Phase 4 next. Companion to
+Status: **complete** — all phases (0-5) done (2026-07-04). Companion to
 [`test-engine-config-yaml.md`](test-engine-config-yaml.md) (that plan consumes
 the module paths this one produces — see its "Depends on" note).
 
@@ -220,7 +220,7 @@ acceptance check for that task, not a suggestion.
 
 ### Phase 5 — documentation
 
-- [ ] **5.1 — Update `docs/arch/peripheral-simulation-backend-architecture.md`.**
+- [x] **5.1 — Update `docs/arch/peripheral-simulation-backend-architecture.md`.**
       Refresh the "Package shape" section for the new tree, and state
       plainly that USB-host mode is the only supported USB mechanism today
       — remove or correct anything that could be read as implying
