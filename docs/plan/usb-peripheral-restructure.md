@@ -1,6 +1,6 @@
 # Plan: USB / peripheral / firmware-ABI folder restructure
 
-Status: in progress — Phases 0-2 done (2026-07-03), Phase 3 next. Companion to
+Status: in progress — Phases 0-3 done (2026-07-04), Phase 4 next. Companion to
 [`test-engine-config-yaml.md`](test-engine-config-yaml.md) (that plan consumes
 the module paths this one produces — see its "Depends on" note).
 
@@ -178,18 +178,18 @@ acceptance check for that task, not a suggestion.
 
 ### Phase 3 — tests: reorganize to match
 
-- [ ] **3.1 — Rename `tests/usb-host/` → `tests/usb/host/`.** The hyphen
+- [x] **3.1 — Rename `tests/usb-host/` → `tests/usb/host/`.** The hyphen
       made it unimportable, forcing every test file to hand-roll a
       `sys.path` insert; a proper package (`__init__.py`) plus the Phase 0
       `conftest.py` removes that boilerplate.
       Verify: full suite green under the new path.
-- [ ] **3.2 — Promote the fake gateway double.** Move
+- [x] **3.2 — Promote the fake gateway double.** Move
       `FakeMmbGateway`/`MmbView` out of the test-local file into
       `tests/support/fake_gateway.py`. `MmbView`'s layout-driven field
       access is already generic; only the import path changes.
       Verify: full suite green; Phase 2's new unit tests (Task 2.3) import
       from the new shared location.
-- [ ] **3.3 — Rename the numbered/staged test files to behavior names**
+- [x] **3.3 — Rename the numbered/staged test files to behavior names**
       matching the new module boundaries — e.g. `test_usb_host_abi_3_1.py` /
       `test_usb_host_abi_3_2.py` → `tests/usb/host/backends/test_stm32_otgfs.py`;
       `test_usb_host_enumerate_4_1.py` → `tests/usb/host/test_cdc_enumerate.py`;
@@ -199,11 +199,12 @@ acceptance check for that task, not a suggestion.
       simpler to reason about with no pytest config file today.
       Verify: full suite green; file names describe behavior, not
       chronology.
-- [ ] **3.4 — Add a `UsbHostCore`-only test proving the split worked.** A
+- [x] **3.4 — Add a `UsbHostCore`-only test proving the split worked.** A
       unit test that drives `service_control_transfers` with a stub
       `responder` that knows nothing about CDC. This is the test that
       demonstrates Phase 2 achieved real decoupling, not just "nothing
-      broke."
+      broke." (Already satisfied by Task 2.3's `tests/usb/host/test_core.py`,
+      whose ScriptedHost responder drives the core with no CDC knowledge.)
 
 ### Phase 4 — enforce the boundary
 
