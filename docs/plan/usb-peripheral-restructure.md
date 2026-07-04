@@ -208,7 +208,7 @@ acceptance check for that task, not a suggestion.
 
 ### Phase 4 — enforce the boundary
 
-- [ ] **4.1 — Add an architecture/boundary test**
+- [x] **4.1 — Add an architecture/boundary test**
       (`tests/test_architecture_boundaries.py`, or an `import-linter`
       config) asserting `usb/host/core.py` and `usb/host/cdc.py` never
       import `usb/host/backends/*`, and `usb/common/*` never imports

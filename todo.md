@@ -19,5 +19,6 @@ Open design gaps from the Layer 2 design session (see
 - [ ] Timeouts should be config-driven per SoC/backend, not hardcoded in scripts
 
 ## Modularity
-- [ ] CDC/ABC split is convention-only, unenforced — add an import-linter/arch test
+- [x] CDC/ABC split is convention-only, unenforced — add an import-linter/arch test
+      (done: tests/test_architecture_boundaries.py)
 t
