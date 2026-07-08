@@ -34,7 +34,11 @@ Three pieces, matching the original architecture sketch:
   up multiple peripherals but test scripts still drive them one at a time.
 - No real capability model (which SoC/peripheral supports which features) —
   Phase 4's capability bridge is interface-only, wiring a model that doesn't
-  exist yet. Building that model is a follow-on, not part of this plan.
+  exist yet. Building that model is a follow-on, not part of this plan. The
+  same gap applies to ABI resolution (Task 1.4): for now it's a hardcoded
+  stub assuming every STM32 `soc.part` supports USB-host CDC via
+  `Stm32OtgFsHostAbi`; the real SoC/peripheral-class → ABI compatibility
+  table is a `todo.md` item, not built here.
 - No Raspberry Pi HIL backend (Layer 4b) — out of scope per earlier
   discussion in this project.
 
@@ -57,12 +61,22 @@ Three pieces, matching the original architecture sketch:
 4. **A `"fake"` backend is a first-class, explicitly-labeled option in the
    config schema**, not a hidden test hack — it's what makes every keyword
    library and Config Manager behavior testable in CI with no hardware
-   attached. It must be impossible to select by accident (see Task 2.4).
+   attached. It must be impossible to select by accident (see Task 2.5).
 5. **This repo has no dependency manifest today** — `target/`, `backends/`,
    `peripherals/`, `firmware_abi/` import nothing beyond the standard
    library. This plan is the first to need external packages (PyYAML,
    `robotframework`, `robotframework-pythonlibcore`), so establishing a
    manifest is Phase 0, not assumed.
+6. **Mock config names a peripheral `class:`, never a Python import path —
+   resolution to driver/ABI is a two-step lookup, and only the first step
+   is real.** `class:` → driver is a fixed, SoC-independent registry (safe
+   to build now: a class driver is reusable across SoCs by design).
+   `soc.part` + `class:` → ABI is a genuine compatibility question this
+   plan does not solve; Task 1.4 ships a hardcoded stub instead
+   (`STM32* supports cdc via Stm32OtgFsHostAbi`, everything else
+   `ConfigError`s) so the YAML stays abstract today without pretending a
+   capability model exists. Replacing the stub with a real table is
+   `todo.md`'s job.
 
 ## Target structure
 
@@ -72,13 +86,14 @@ engine/
   config_schema.py       # SocConfig, ProbeConfig, GatewayConfig, MockConfig dataclasses
   config_parser.py         # parse_config(path) -> ResolvedConfig; validation, ConfigError
   backend_factory.py        # build_backend(soc) -> TargetGateway; "jlink" | "openocd" | "fake"
-  peripheral_factory.py      # build_peripherals(mocks, gateway) -> dict[str, object]
+  peripheral_factory.py      # build_peripherals(mocks, soc, gateway) -> dict[str, object]
   context.py                  # TestContext, build_context(path) -- the Config Manager entry point
   registry.py                   # process-wide runtime registry: install / peripheral / gateway / reset
   test_engine.py                  # run_suite(robot_target, config_path, outdir) -> RunResult
   cli.py                            # thin argparse entry point calling run_suite()
   keywords/
     __init__.py
+    core_keywords.py                # CoreKeywords(HybridCore) -- peripheral-independent: Delay, Reset
     usb_host_cdc_keywords.py         # UsbHostCdcKeywords(HybridCore) -- example keyword library
   capabilities_bridge.py               # interface-only stub, Phase 4
 
@@ -94,6 +109,8 @@ tests/
     test_registry.py
     test_engine_smoke.robot               # trivial single-Log-keyword suite for Task 2.2
     test_engine_smoke.py                   # drives run_suite() against it
+    test_core_keywords.robot                # exercises Delay/Reset with zero mocks configured
+    test_core_keywords.py
     test_usb_host_cdc_keywords.robot        # exercises the example keyword library end-to-end (fake backend)
     test_usb_host_cdc_keywords.py
 ```
@@ -113,16 +130,66 @@ soc:
 
 mocks:
   - name: usb_host
-    driver: peripherals.usb.host.cdc.UsbHostCdcDevice
-    abi: peripherals.usb.host.backends.stm32_otgfs.Stm32OtgFsHostAbi
+    class: cdc
     channels: 8
+    device:
+      vid: 0x0483
+      pid: 0x5740
 ```
 
-`driver` is the class the keyword library wraps; `abi` is the concrete
-per-MCU contract implementation the driver is constructed with. Two-level
-resolution because a class driver (`UsbHostCdcDevice`) is reusable across
-SoCs, but which ABI wires it to hardware is per-SoC — this is exactly the
-split Phase 2/3 of the restructure plan sets up.
+`class` names the peripheral abstractly — never a Python import path.
+`peripheral_factory` resolves it in two steps:
+
+1. `class:` → driver class, via a fixed `{"cdc": UsbHostCdcDevice, ...}`
+   registry. SoC-independent: a class driver is reusable across SoCs by
+   design, so this mapping never depends on `soc.part`.
+2. `soc.part` + `class:` → ABI implementation. **This step is a stub, not
+   a capability model.** For now it assumes every STM32 `soc.part`
+   supports the USB-host CDC peripheral and always resolves to
+   `Stm32OtgFsHostAbi`, raising `ConfigError` for any non-STM32 `soc.part`
+   or any `class:` other than `cdc`. The real per-part compatibility
+   table is a `todo.md` item — see Key decision 6 and the Non-goals
+   section above.
+
+`device:` is optional per-mock identity data the class driver presents
+during enumeration (VID/PID today; descriptors and line-coding defaults
+later) — kept as data, not arguments to a keyword, so it can vary per
+config without touching `.robot` scripts.
+
+### USB CDC device-mock keyword design
+
+Despite the `usb_host` naming, `UsbHostCdcDevice` mocks the *device* side
+(CDC-ACM) presented to the target's USB-host middleware — "host" describes
+the target's role, not the mock's. This is the design worked out for its
+keyword library, and the pattern future device classes (HID, MSC, ...)
+should follow:
+
+- **One keyword library per device class, never a generic USB library.**
+  `UsbHostCdcKeywords` is what a `.robot` suite imports; USB itself is
+  never a directly-importable Robot Framework library, only the
+  driver/ABI resolution triggered by the `class:` field in the YAML
+  config. A future HID mock gets its
+  own `usb_host_hid_keywords.py`, not a shared "USB" library — the class
+  is more abstract than the transport, from the keyword surface's point
+  of view.
+- **Four keywords, no more:** `Attach Device`, `Detach Device`,
+  `Send Packet`, `Receive Packet`. Attach/Detach are external lifecycle
+  events (plugging/unplugging the mock); Send/Receive are the two things
+  a normal CDC application does (`bulk_in`/`bulk_out` under the hood).
+- **Enumeration is not a keyword.** It isn't an independent event from
+  the application's point of view — it's a mandatory, automatic
+  consequence of attaching. `Attach Device` runs `UsbHostCore.attach()`
+  (physical connect + port reset) and `UsbHostCdcDevice.enumerate()`
+  (the SET_ADDRESS/GET_DESCRIPTOR/SET_CONFIGURATION control-transfer
+  sequence) back to back; by the time the keyword returns, the mock is
+  host-configured and ready for traffic. Same reasoning applies to CDC
+  line-coding negotiation (GET/SET_LINE_CODING): it's a control transfer
+  the host driver issues automatically, not application logic, so its
+  default value is config data (alongside VID/PID above), never a
+  keyword.
+- **No dedicated assertion keyword.** `Receive Packet` returns the bytes
+  it read; a test verifies them with Robot's own `Should Be Equal`
+  rather than a peripheral-specific "verify" keyword.
 
 ## Tasks
 
@@ -149,13 +216,21 @@ split Phase 2/3 of the restructure plan sets up.
 ### Phase 1 — Config Manager
 
 - [ ] **1.1 — `engine/config_schema.py`.** Dataclasses for `SocConfig`,
-      `ProbeConfig`, `GatewayConfig`, `MockConfig`, `TimeoutConfig`. Pure
-      data, no parsing or I/O.
+      `ProbeConfig`, `GatewayConfig`, `MockConfig`, `TimeoutConfig`.
+      `MockConfig` carries `peripheral_class` (parsed from the YAML
+      `class:` key — `class` is a Python keyword, so the dataclass field
+      is named differently) and an optional nested `device` mapping (e.g.
+      CDC's `vid`/`pid`) — untyped/passthrough at this layer so each
+      driver defines its own device-identity fields without schema
+      changes; see "USB CDC device-mock keyword design" above. No
+      `driver`/`abi` fields — those are resolved, not configured (Task
+      1.4). Pure data, no parsing or I/O.
       Verify: unit test constructs each dataclass directly, checks defaults.
 - [ ] **1.2 — `engine/config_parser.py`: `parse_config(path) -> ResolvedConfig`.**
       Loads YAML, validates required fields, raises `ConfigError` with a
       specific message for each failure mode (missing `soc:`, unknown
-      `backend:`, empty `mocks:`, duplicate mock `name:`).
+      `backend:`, empty `mocks:`, duplicate mock `name:`, unknown
+      `class:`).
       Verify: table-driven tests — one passing case against
       `minimal_fake.yaml`, one test per failure mode above, each asserting
       the specific `ConfigError` message.
@@ -166,13 +241,22 @@ split Phase 2/3 of the restructure plan sets up.
       with a message naming what's missing, not a silent no-op.
       Verify: unit test with a monkeypatched backend constructor (no real
       probe connection) asserts the right class is selected per config.
-- [ ] **1.4 — `engine/peripheral_factory.py`: `build_peripherals(mocks, gateway) -> dict[str, object]`.**
-      Resolves each mock's `driver:` and `abi:` dotted paths via
-      `importlib`, constructs the ABI against the gateway, then the driver
-      against the ABI, keyed by `name:`.
+- [ ] **1.4 — `engine/peripheral_factory.py`: `build_peripherals(mocks, soc, gateway) -> dict[str, object]`.**
+      Two-step resolution per mock: (a) `peripheral_class` → driver class
+      via a fixed `{class_name: driver_path}` registry, resolved via
+      `importlib` — SoC-independent; (b) `soc.part` + `peripheral_class` →
+      ABI implementation. Step (b) is a stub for this plan, not a
+      capability model: it assumes every STM32 `soc.part` supports the
+      peripheral and always resolves `cdc` to `Stm32OtgFsHostAbi`, raising
+      `ConfigError` for any other class or non-STM32 part. Constructs the
+      ABI against the gateway, then the driver against the ABI, keyed by
+      `name:`. Real per-part compatibility data replaces this stub later —
+      tracked in `todo.md`, not this task.
       Verify: unit test with a fake gateway and the `minimal_fake.yaml`
-      fixture asserts `build_peripherals(...)["usb_host"]` is the expected
-      type and its `.abi` is wired to the fake gateway.
+      fixture (using `class: cdc`) asserts `build_peripherals(...)["usb_host"]`
+      is the expected type and its `.abi` is wired to the fake gateway; a
+      second test asserts a non-STM32 `soc.part` or unknown `class:` raises
+      `ConfigError`.
 - [ ] **1.5 — `engine/context.py`: `TestContext` + `build_context(path) -> TestContext`.**
       Ties 1.1–1.4 together as the single Config Manager entry point.
       Verify: end-to-end unit test, `minimal_fake.yaml` in, a `TestContext`
@@ -197,23 +281,35 @@ split Phase 2/3 of the restructure plan sets up.
       Verify against `tests/engine/test_engine_smoke.robot` — a single
       suite with one `Log` keyword and no peripheral dependency — proving
       the plumbing works before any keyword-library complexity is added.
-- [ ] **2.3 — Example keyword library: `engine/keywords/usb_host_cdc_keywords.py`.**
+- [ ] **2.3 — General keyword library: `engine/keywords/core_keywords.py`.**
+      `CoreKeywords(HybridCore)`, always loaded regardless of what's in
+      `mocks:` — the peripheral-independent tier from the keyword-protocol
+      discussion (as opposed to per-class libraries like
+      `UsbHostCdcKeywords`). Exposes `Delay` (thin wrapper over
+      `time.sleep`, touches no registry state) and `Reset` (calls
+      `registry.reset()`). Independent of Task 2.4 — neither needs a mock
+      configured or a specific peripheral driver.
+      Verify: `tests/engine/test_core_keywords.robot` calls `Delay` and
+      `Reset` through `run_suite()` against a config with an empty
+      `mocks:` list and passes.
+- [ ] **2.4 — Example keyword library: `engine/keywords/usb_host_cdc_keywords.py`.**
       `UsbHostCdcKeywords(HybridCore)` wrapping
       `peripherals.usb.host.cdc.UsbHostCdcDevice`, reading from
-      `registry.peripheral("usb_host")`. Exposes `Attach Device`,
-      `Enumerate Device`, `Echo And Verify` (per the design already agreed —
-      see the architecture doc's USB-host section for the underlying calls).
+      `registry.peripheral("usb_host")`. Exposes exactly `Attach Device`,
+      `Detach Device`, `Send Packet`, `Receive Packet` — per "USB CDC
+      device-mock keyword design" above. No `Enumerate Device` keyword:
+      `Attach Device` runs `attach()` + `enumerate()` internally.
       Verify: `tests/engine/test_usb_host_cdc_keywords.robot` runs these
-      three keywords through `run_suite()` against a `backend: fake` config
+      four keywords through `run_suite()` against a `backend: fake` config
       and passes.
-- [ ] **2.4 — Add the `"fake"` backend to `backend_factory.py`.** Constructs
+- [ ] **2.5 — Add the `"fake"` backend to `backend_factory.py`.** Constructs
       the shared `FakeMmbGateway` test double (from the restructure plan's
       Task 4.2) instead of a real probe. Gate it behind an explicit
       `WCET_ALLOW_FAKE_BACKEND=1` environment check in `build_backend`, so a
       config typo can never silently run a "test" against nothing.
       Verify: `minimal_fake.yaml` works with the env var set; a unit test
       asserts `build_backend` raises without it.
-- [ ] **2.5 — `RunResult` dataclass.** `run_suite()` returns pass/fail
+- [ ] **2.6 — `RunResult` dataclass.** `run_suite()` returns pass/fail
       counts and the `output.xml`/`log.html`/`report.html` paths instead of
       just Robot's raw exit code, so a future Layer 1 CLI has something
       structured to consume.
@@ -233,6 +329,22 @@ split Phase 2/3 of the restructure plan sets up.
       this is demoable, not just covered by unit tests.
       Verify: copy-pasting the documented command from a clean checkout
       works.
+- [ ] **3.3 — Keyword reference docs via `libdoc`.** Write real docstrings
+      on every keyword in the general library and each per-class library
+      (`UsbHostCdcKeywords`'s four keywords), then generate the HTML
+      reference with `python -m robot.libdoc`. Source of truth stays the
+      code — no hand-maintained keyword reference to fall out of sync.
+      Verify: generated doc lists `Attach Device`, `Detach Device`,
+      `Send Packet`, `Receive Packet` with their argument descriptions.
+- [ ] **3.4 — YAML config reference doc.** A short field-reference table
+      (name/type/required/default/meaning) for `SocConfig`/`MockConfig`,
+      including the `device` block, pointing at
+      `tests/engine/fixtures/minimal_fake.yaml` as the canonical example
+      instead of duplicating it inline — so if the schema changes and the
+      fixture doesn't, `test_config_parser.py` fails before the doc goes
+      stale.
+      Verify: doc references the fixture path by name; the fixture still
+      parses under `parse_config` (already covered by 1.2's tests).
 
 ### Phase 4 — follow-through on existing `todo.md` items
 
@@ -258,6 +370,12 @@ split Phase 2/3 of the restructure plan sets up.
 ## Order
 
 Phase 0 before everything. Within Phase 1, tasks are sequential (each
-depends on the previous). Phase 2 needs all of Phase 1. Phase 3 needs Task
-2.2 and 2.5. Phase 4 tasks are independent of each other and of Phase 3 —
-either can run first, or in parallel with Phase 3.
+depends on the previous). Phase 2 needs all of Phase 1, except Task 2.3
+(general keywords) only needs 2.1/2.2 and is independent of 2.4 (CDC
+keywords) — either can be built first, or in parallel. Phase 3 needs Task
+2.2 and 2.6 for 3.1/3.2; Task 3.3 additionally needs 2.3 and 2.4 (the
+keyword docstrings it generates from); Task 3.4 only needs Phase 1 (the
+fixture and schema) and can run any time after that, in parallel with
+everything else in Phase 3. Phase 4 tasks are independent of each other and
+of Phase 3 — either
+can run first, or in parallel with Phase 3.
