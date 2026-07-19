@@ -1,6 +1,6 @@
 # Plan: Layer 2 — Test Engine, Config YAML, and the parser
 
-Status: proposed, not started.
+Status: in progress — Phase 0 complete.
 
 Depends on [`usb-peripheral-restructure.md`](usb-peripheral-restructure.md):
 Task 1.4 below resolves peripheral driver paths like
@@ -29,9 +29,11 @@ Three pieces, matching the original architecture sketch:
 
 - No CLI/CI-CD plugin beyond a minimal argument-parsing entry point (Phase 3)
   — the full Layer 1 "User & API Layer" is out of scope.
-- No concurrency/locking model for multiple simultaneously-active peripherals
-  — tracked in `todo.md`, not resolved here. This plan's Config Manager wires
-  up multiple peripherals but test scripts still drive them one at a time.
+- No multi-peripheral configs at all — the MMB structure (how multiple
+  peripherals share the memory-mapped block) isn't designed yet, so the
+  Config Manager accepts exactly one `mocks:` entry and rejects more.
+  Resolving the MMB structure, and the concurrency/locking model that
+  follows from it, is tracked in `todo.md`, not here.
 - No real capability model (which SoC/peripheral supports which features) —
   Phase 4's capability bridge is interface-only, wiring a model that doesn't
   exist yet. Building that model is a follow-on, not part of this plan. The
@@ -101,7 +103,6 @@ tests/
   engine/
     fixtures/
       minimal_fake.yaml                # single fake-backend USB host CDC mock, for parser + engine tests
-      overlapping_mocks.yaml             # deliberately colliding MMB addresses, for negative tests
     test_config_parser.py
     test_backend_factory.py
     test_peripheral_factory.py
@@ -195,7 +196,7 @@ should follow:
 
 ### Phase 0 — scaffold
 
-- [ ] **0.1 — Establish a dependency manifest.** Add `pyproject.toml` (or
+- [x] **0.1 — Establish a dependency manifest.** Add `pyproject.toml` (or
       `requirements.txt`, whichever matches how the project is actually
       run today — check before choosing) declaring `PyYAML`,
       `robotframework`, and `robotframework-pythonlibcore`. First
@@ -203,15 +204,15 @@ should follow:
       description so it isn't a surprise.
       Verify: a clean virtualenv install from the manifest succeeds; existing
       tests (which need none of these) still pass without it.
-- [ ] **0.2 — Create the `engine/` package** (flat, top-level — matching
+- [x] **0.2 — Create the `engine/` package** (flat, top-level — matching
       `target/`, `backends/`, `peripherals/` convention, not nested under a
       namespace package). Empty `__init__.py`, no logic yet.
       Verify: `import engine` works from repo root.
-- [ ] **0.3 — Write the config schema + example fixtures before the parser.**
+- [x] **0.3 — Write the config schema + example fixtures before the parser.**
       Commit `tests/engine/fixtures/minimal_fake.yaml` (shape above, using
-      `backend: fake`) and `overlapping_mocks.yaml`. No parser code yet —
-      these are the target the parser is built against.
-      Verify: fixtures are valid YAML (`python -c "import yaml; yaml.safe_load(open(...))"`).
+      `backend: fake`). No parser code yet — it is the target the parser is
+      built against.
+      Verify: the fixture is valid YAML (`python -c "import yaml; yaml.safe_load(open(...))"`).
 
 ### Phase 1 — Config Manager
 
@@ -229,8 +230,9 @@ should follow:
 - [ ] **1.2 — `engine/config_parser.py`: `parse_config(path) -> ResolvedConfig`.**
       Loads YAML, validates required fields, raises `ConfigError` with a
       specific message for each failure mode (missing `soc:`, unknown
-      `backend:`, empty `mocks:`, duplicate mock `name:`, unknown
-      `class:`).
+      `backend:`, empty `mocks:`, more than one `mocks:` entry (the MMB
+      structure for multiple peripherals isn't designed yet — see
+      `todo.md`), unknown `class:`).
       Verify: table-driven tests — one passing case against
       `minimal_fake.yaml`, one test per failure mode above, each asserting
       the specific `ConfigError` message.
@@ -262,12 +264,6 @@ should follow:
       Verify: end-to-end unit test, `minimal_fake.yaml` in, a `TestContext`
       out with a working fake-backed peripheral — zero RF, zero real
       hardware.
-- [ ] **1.6 — MMB address collision validation.** `build_context` (or
-      `peripheral_factory`) rejects configs where two mocks' resolved base
-      addresses + sizes overlap. Closes the matching `todo.md` item.
-      Verify: `overlapping_mocks.yaml` fixture raises `ConfigError`;
-      `minimal_fake.yaml` (non-overlapping) does not.
-
 ### Phase 2 — runtime registry + Test Engine
 
 - [ ] **2.1 — `engine/registry.py`.** `install(context)`, `peripheral(name)`,

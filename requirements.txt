@@ -1,8 +1,5 @@
-# First dependency manifest this repo has ever declared — added for the
-# Layer 2 test engine (docs/plan/test-engine-config-yaml.md, Task 0.1).
-#
-# Scope: these packages are needed only by `engine/` and its tests. The
-# existing stack (target/, backends/, peripherals/, firmware_abi/) remains
+# Dependencies for the Layer 2 test engine (engine/ and its tests) only.
+# The existing stack (target/, backends/, peripherals/, firmware_abi/) is
 # stdlib-only and must keep working without any of this installed.
 #
 # Bounds assume Python 3.9 (the interpreter this project is run with).

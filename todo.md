@@ -10,9 +10,14 @@ Open design gaps from the Layer 2 design session (see
 - [ ] Keyword libs must call only abstract peripheral interfaces, never concrete ABIs
 
 ## Multi-peripheral concurrency
+- [ ] Resolve the MMB structure: how multiple peripherals share the
+      memory-mapped block (fixed slots? descriptor table? per-peripheral
+      base+size negotiation?) is not designed. Until it is, the Config
+      Manager accepts exactly one `mocks:` entry per config and rejects
+      more; address-collision validation only becomes meaningful (and
+      possible) once this design exists
 - [ ] No locking around shared `TargetGateway` for concurrent peripherals
 - [ ] No pump/scheduling model for servicing peripherals concurrently
-- [ ] Config Manager must validate MMB addresses don't collide across peripherals
 
 ## SoC generality
 - [ ] Capabilities not wired to RF skip/tags yet (`target/capabilities.py`)

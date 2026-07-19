@@ -1,0 +1,18 @@
+# Minimal valid config: one fake-backend USB host CDC mock.
+#
+# `backend: fake` only works with WCET_ALLOW_FAKE_BACKEND=1 set; there is
+# deliberately no way to run against nothing by accident.
+
+soc:
+  part: STM32F407VG
+  backend: fake
+  gateway:
+    mmb_base: 0x2001E000
+
+mocks:
+  - name: usb_host
+    class: cdc
+    channels: 8
+    device:
+      vid: 0x0483
+      pid: 0x5740
