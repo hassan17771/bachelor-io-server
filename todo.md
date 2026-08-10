@@ -1,13 +1,26 @@
 # TODO
 
 Open design gaps from the Layer 2 design session (see
-`docs/arch/peripheral-simulation-backend-architecture.md`).
+`docs/arch/io-server-architecture.md`).
 
 ## Layer 2 wiring
 - [ ] Config Manager: pure-Python, parses SoC + Mock List YAML -> `TestContext`
 - [ ] Test Engine: drive `robot.run()` in-process (not CLI) for live-object injection
 - [ ] Runtime registry: zero-arg keyword libs read live instances from it
 - [ ] Keyword libs must call only abstract peripheral interfaces, never concrete ABIs
+
+## Probe connection
+- [ ] Direct probe connection is schema-only. `probe.connection: direct`
+      parses (with `serial:` selecting among attached probes) but
+      `build_backend` raises `NotImplementedError` — both backends are
+      currently clients of an already-running `JLinkGDBServer` / OpenOCD
+      daemon, and nothing in this repo launches or drives a probe over USB
+      itself. Implementing it means either a native driver backend (pylink,
+      pyocd) or having the engine spawn the server with
+      `-select USB=<serial>`; that choice is the open question
+- [ ] `serial:` therefore has no effect in `connection: server` mode and is
+      rejected there rather than ignored — revisit if the engine ever gains
+      server-launching, which would make serial meaningful in both modes
 
 ## Multi-peripheral concurrency
 - [ ] Resolve the MMB structure: how multiple peripherals share the
@@ -43,6 +56,37 @@ Open design gaps from the Layer 2 design session (see
       usb_host-class mock/device is ever configured; accepted as a known
       inconsistency for now. Retrofit to the name-as-first-argument pattern
       once attaching multiple simultaneous USB-host devices is needed.
+
+## USB host MMB access
+- [ ] `Stm32OtgFsHostAbi` spends several single-field GDB round trips per
+      transfer where one bulk read would do: `channel_info()`'s three
+      `read_u8` calls (peripherals/usb/host/backends/stm32_otgfs.py:129-131)
+      are 3 contiguous bytes of the 12-byte channel header, and `validate()`'s
+      three reads (same file, lines 76-78) sit within the 16-byte block
+      header. Each round trip pays real J-Link/SWD/USB latency (why
+      `enumerate()`'s default timeout is 60s, peripherals/usb/host/cdc.py);
+      batching these into single `read()` calls and unpacking locally would
+      cut round trips per transfer roughly in half on real hardware.
+
+## CLI, docs, and capability bridge (deferred from test-engine-config-yaml.md)
+Phases 3 and 4 of `docs/plan/test-engine-config-yaml.md` were taken out of
+scope on 2026-08-07; these tasks are the ones they contained, to be picked
+up as their own plan once that plan's Phase 2 lands.
+- [ ] `engine/cli.py`: thin `argparse` entry point (`--robot`, `--config`,
+      `--outdir`) calling `run_suite()`
+- [ ] End-to-end usage note: exact command line for the fake-backend and
+      hardware invocations of `run_suite()`
+- [ ] Keyword reference docs via `python -m robot.libdoc`, generated from
+      real docstrings on `CoreKeywords` and `UsbHostCdcKeywords`
+- [ ] YAML config reference doc: field-reference table for
+      `SocConfig`/`MockConfig`, pointing at `tests/engine/fixtures/minimal_fake.yaml`
+- [ ] Config-driven timeouts: thread the optional `timeouts:` block
+      (`TimeoutConfig`) into peripheral construction, replacing hardcoded
+      defaults
+- [ ] Capability bridge stub: `engine/capabilities_bridge.py`, interface
+      translating a (not-yet-defined) per-mock capability set into Robot
+      Framework `--include`/`--exclude` args — wiring only, no capability
+      model (see "SoC generality" above)
 
 ## GPIO simulation
 - [ ] Add GPIO digital in/out peripheral simulation. No driver/ABI/keyword-

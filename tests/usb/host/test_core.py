@@ -22,7 +22,6 @@ from firmware_abi.usb.host.stm32_otgfs import (
     EP_TYPE_CTRL,
     URB_DONE,
     URB_IDLE,
-    USBH_SIM_BASE,
 )
 from peripherals.usb.host.core import ControlTransferLog, UsbHostCore
 from peripherals.usb.host.backends.stm32_otgfs import Stm32OtgFsHostAbi
@@ -31,6 +30,10 @@ CTRL_OUT_CH = 0
 CTRL_IN_CH = 1
 BULK_OUT_CH = 3
 BULK_IN_CH = 4
+
+# Stands in for whatever address a build's MMB lands at; the scripted gateway
+# has no memory map, so any address does.
+MMB_BASE = 0x20001000
 
 REQ_DIR_DEVICE_TO_HOST = 0x80
 
@@ -160,8 +163,8 @@ class ScriptedHostGateway(FakeMmbGateway):
 class UsbHostCoreControlTest(unittest.TestCase):
     def setUp(self) -> None:
         self.gw = ScriptedHostGateway()
-        self.view = MmbView(self.gw, USBH_SIM_BASE, DEFAULT_USBH_SIM_LAYOUT)
-        abi = Stm32OtgFsHostAbi(self.gw, base_address=USBH_SIM_BASE,
+        self.view = MmbView(self.gw, MMB_BASE, DEFAULT_USBH_SIM_LAYOUT)
+        abi = Stm32OtgFsHostAbi(self.gw, base_address=MMB_BASE,
                                 layout=DEFAULT_USBH_SIM_LAYOUT)
         self.core = UsbHostCore(abi)
         self.view.open_pipe(CTRL_OUT_CH, 0x00, EP_TYPE_CTRL, EP_DIR_OUT)
@@ -252,8 +255,8 @@ class UsbHostCoreControlTest(unittest.TestCase):
 class UsbHostCoreBulkTest(unittest.TestCase):
     def setUp(self) -> None:
         self.gw = FakeMmbGateway()
-        self.view = MmbView(self.gw, USBH_SIM_BASE, DEFAULT_USBH_SIM_LAYOUT)
-        abi = Stm32OtgFsHostAbi(self.gw, base_address=USBH_SIM_BASE,
+        self.view = MmbView(self.gw, MMB_BASE, DEFAULT_USBH_SIM_LAYOUT)
+        abi = Stm32OtgFsHostAbi(self.gw, base_address=MMB_BASE,
                                 layout=DEFAULT_USBH_SIM_LAYOUT)
         self.core = UsbHostCore(abi)
         self.view.open_pipe(BULK_OUT_CH, 0x01, EP_TYPE_BULK, EP_DIR_OUT)

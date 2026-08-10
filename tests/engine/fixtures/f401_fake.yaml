@@ -1,0 +1,17 @@
+# The f401-USBsim board with no board: the echo suite's fake-backend config.
+#
+# `backend: fake` talks to no target, so it only works with
+# WCET_ALLOW_FAKE_BACKEND=1 set. The MMB address is absent by design -- it is
+# read from the firmware ELF, not from here.
+
+soc:
+  part: STM32F401RC
+  backend: fake
+
+mocks:
+  - name: usb_host
+    class: cdc
+    channels: 8
+    device:
+      vid: 0x0483
+      pid: 0x5740

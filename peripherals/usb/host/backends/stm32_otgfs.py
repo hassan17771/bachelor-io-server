@@ -20,7 +20,6 @@ from firmware_abi.usb.host.stm32_otgfs import (
     USBH_SIM_MAGIC,
     USBH_SIM_VERSION,
     UsbhSimLayout,
-    resolve_usbh_sim_base,
 )
 from target.gateway import TargetGateway
 
@@ -41,12 +40,12 @@ class Stm32OtgFsHostAbi(UsbHostSimAbi):
     def __init__(
         self,
         gateway: TargetGateway,
-        base_address: Optional[int] = None,
+        base_address: int,
         layout: UsbhSimLayout = DEFAULT_USBH_SIM_LAYOUT,
         irqn: int = OTG_FS_IRQn,
     ) -> None:
         self.gateway = gateway
-        self.base_address = resolve_usbh_sim_base() if base_address is None else base_address
+        self.base_address = base_address
         self.layout = layout
         self.irqn = irqn
 

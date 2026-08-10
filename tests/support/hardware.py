@@ -10,7 +10,8 @@ each test file states only what it exercises.
 Environment variables understood here:
 
     WCET_USB_HOST_TEST     1 to run the hardware tests (skip otherwise)
-    WCET_USB_HOST_BASE     MMB base address (default 0x2001E000)
+    WCET_FIRMWARE_ELF      the .elf flashed on the board; the MMB address is
+                           read from its symbol table (required)
     WCET_USB_HOST_TIMEOUT  generic wait timeout, seconds (per-test default)
     WCET_JLINK_HOST        GDB server host (default 127.0.0.1)
     WCET_JLINK_PORT        GDB server port (default 2331)
@@ -18,19 +19,22 @@ Environment variables understood here:
     WCET_APPLI_STATE_ADDR  address of the firmware global Appli_state
     WCET_USB_HOST_ELF      firmware .elf to resolve Appli_state from instead
     WCET_NM                nm binary (default arm-none-eabi-nm)
+    WCET_STM32_PART        soc.part for the engine config YAML (default STM32F411CE)
 """
 from __future__ import annotations
 
 import os
 import unittest
+from pathlib import Path
 from typing import Callable, Optional
 
 from backends.jlink import JLinkBackend, JLinkConnectionConfig
+from engine.config_parser import ConfigError
+from engine.context import resolve_mmb_base
 from firmware_abi.usb.host.stm32_otgfs import (
     DEFAULT_USBH_SIM_LAYOUT,
     OTG_FS_IRQn,
     USBH_SIM_MAGIC,
-    resolve_usbh_sim_base,
 )
 from peripherals.usb.host.backends.stm32_otgfs import Stm32OtgFsHostAbi
 from target.gateway import TargetError
@@ -74,6 +78,39 @@ def jlink_config_from_env() -> JLinkConnectionConfig:
         gdb_port=env_int("WCET_JLINK_PORT", 2331),
         timeout_s=env_float("WCET_JLINK_TIMEOUT", 2.0),
     )
+
+
+def hil_config_yaml(tmp_path: Path, **overrides: str) -> Path:
+    """Write an engine config YAML wired to the same board as the env vars above.
+
+    Uses `backend: jlink` with `soc.part`/`soc.probe` taken from
+    WCET_STM32_PART/WCET_JLINK_HOST/WCET_JLINK_PORT/WCET_JLINK_TIMEOUT, so the
+    engine hardware tests share one board/GDB-server setup with the rest of
+    this file. `overrides` replaces individual YAML values by key
+    (`part`, `host`, `port`, `timeout_s`).
+    """
+    values = {
+        "part": os.environ.get("WCET_STM32_PART", "STM32F411CE"),
+        "host": os.environ.get("WCET_JLINK_HOST", "127.0.0.1"),
+        "port": env_int("WCET_JLINK_PORT", 2331),
+        "timeout_s": env_float("WCET_JLINK_TIMEOUT", 2.0),
+    }
+    values.update(overrides)
+    text = (
+        "soc:\n"
+        f"  part: {values['part']}\n"
+        "  backend: jlink\n"
+        "  probe:\n"
+        f"    host: {values['host']}\n"
+        f"    port: {values['port']}\n"
+        f"    timeout_s: {values['timeout_s']}\n"
+        "mocks:\n"
+        "  - name: usb_host\n"
+        "    class: cdc\n"
+    )
+    path = tmp_path / "hil_config.yaml"
+    path.write_text(text)
+    return path
 
 
 def address_from_map(map_path: str, symbol: str) -> Optional[int]:
@@ -166,7 +203,10 @@ class UsbHostHardwareTest(unittest.TestCase):
             raise unittest.SkipTest("set WCET_USB_HOST_TEST=1 to run the USB host hardware test")
 
         self.layout = DEFAULT_USBH_SIM_LAYOUT
-        self.base = resolve_usbh_sim_base()
+        try:
+            self.base = resolve_mmb_base()
+        except ConfigError as exc:
+            self.fail(f"could not locate the MMB in the flashed build: {exc}")
         self.timeout_s = env_float("WCET_USB_HOST_TIMEOUT", self.DEFAULT_TIMEOUT_S)
 
         self.target = JLinkBackend(jlink_config_from_env()).connect()

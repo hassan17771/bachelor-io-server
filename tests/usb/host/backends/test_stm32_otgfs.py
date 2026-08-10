@@ -36,7 +36,6 @@ from firmware_abi.usb.host.stm32_otgfs import (
     OTG_FS_IRQn,
     URB_DONE,
     URB_IDLE,
-    USBH_SIM_BASE,
     USBH_SIM_MAGIC,
     USBH_SIM_VERSION,
 )
@@ -48,6 +47,10 @@ from target.gateway import TargetTimeoutError
 # The first SETUP CDC enumeration emits: GET_DESCRIPTOR(Device, wLength=8).
 GET_DESCRIPTOR_DEVICE_8 = bytes([0x80, 0x06, 0x00, 0x01, 0x00, 0x00, 0x08, 0x00])
 
+# Where a build happened to put its MMB. The fake gateway has no memory map,
+# so any address does; the ABI is told one and never guesses.
+MMB_BASE = 0x20001000
+
 # Deterministic pipe allocation: ch0 EP0-OUT, ch1 EP0-IN,
 # ch3 bulk-OUT EP0x01, ch4 bulk-IN EP0x81.
 CTRL_OUT_CH = 0
@@ -56,12 +59,20 @@ BULK_OUT_CH = 3
 BULK_IN_CH = 4
 
 
+class ConstructionTest(unittest.TestCase):
+    def test_base_address_is_required(self) -> None:
+        # There is no default to fall back on: either the caller resolved an
+        # address from the build under test, or there is nothing to talk to.
+        with self.assertRaises(TypeError):
+            Stm32OtgFsHostAbi(FakeMmbGateway())  # type: ignore[call-arg]
+
+
 class LifecyclePortTest(unittest.TestCase):
     """validate / connect / disconnect / wait_for_port_reset / accept_port_reset."""
 
     def setUp(self) -> None:
         self.layout = DEFAULT_USBH_SIM_LAYOUT
-        self.base = USBH_SIM_BASE
+        self.base = MMB_BASE
         self.gw = FakeMmbGateway()
         self.view = MmbView(self.gw, self.base, self.layout)
         self.abi = Stm32OtgFsHostAbi(self.gw, base_address=self.base, layout=self.layout)
@@ -88,6 +99,21 @@ class LifecyclePortTest(unittest.TestCase):
         self.view.set_u16("block_size", BLOCK_SIZE + 4)
         with self.assertRaises(UsbHostSimError):
             self.abi.validate()
+
+    def test_validate_accepts_a_header_reporting_version_two(self) -> None:
+        # Spelled out rather than taken from the constant: this is the number
+        # usbh_sim.h publishes, so writing it here would catch the constant
+        # drifting away from the firmware.
+        self.view.set_u16("version", 2)
+        self.assertEqual(self.abi.validate().version, 2)
+
+    def test_validate_rejects_another_version_naming_both(self) -> None:
+        self.view.set_u16("version", 1)
+        with self.assertRaises(UsbHostSimError) as caught:
+            self.abi.validate()
+        message = str(caught.exception)
+        self.assertIn("0x0001", message)
+        self.assertIn(f"0x{USBH_SIM_VERSION:04X}", message)
 
     # -- connect / disconnect ------------------------------------------------
 
@@ -156,7 +182,7 @@ class TransferServicingTest(unittest.TestCase):
 
     def setUp(self) -> None:
         self.layout = DEFAULT_USBH_SIM_LAYOUT
-        self.base = USBH_SIM_BASE
+        self.base = MMB_BASE
         self.gw = FakeMmbGateway()
         self.view = MmbView(self.gw, self.base, self.layout)
         self.abi = Stm32OtgFsHostAbi(self.gw, base_address=self.base, layout=self.layout)
