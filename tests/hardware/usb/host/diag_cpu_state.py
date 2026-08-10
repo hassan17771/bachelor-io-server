@@ -7,7 +7,8 @@ us definitively whether the 9-second "hang" is a HardFault (frozen in the fault
 handler) or the middleware spinning/delaying in normal code.
 
     cd wcet-io-server
-    python tests/hardware/usb/host/diag_cpu_state.py
+    WCET_FIRMWARE_ELF=../Release/blackUSB.elf \
+        python tests/hardware/usb/host/diag_cpu_state.py
 
 It does not reset the target, so the stuck state is preserved.
 """
@@ -23,7 +24,9 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from backends.jlink import JLinkBackend, JLinkConnectionConfig
-from firmware_abi.usb.host.stm32_otgfs import DEFAULT_USBH_SIM_LAYOUT, resolve_usbh_sim_base
+from engine.config_parser import ConfigError
+from engine.context import resolve_mmb_base
+from firmware_abi.usb.host.stm32_otgfs import DEFAULT_USBH_SIM_LAYOUT
 
 # --- STM32 USB Host middleware state (read straight from hUsbHostFS) ----------
 # hUsbHostFS lives at a fixed .bss address (see Release/blackUSB.map). The handle
@@ -97,7 +100,11 @@ def _le_word(regs_hex: str, index: int) -> int:
 
 def main() -> int:
     layout = DEFAULT_USBH_SIM_LAYOUT
-    base = resolve_usbh_sim_base()
+    try:
+        base = resolve_mmb_base()
+    except ConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
 
     config = JLinkConnectionConfig(
         host=os.environ.get("WCET_JLINK_HOST", "127.0.0.1"),

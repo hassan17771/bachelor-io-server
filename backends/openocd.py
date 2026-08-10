@@ -162,6 +162,10 @@ class OpenOcdBackend(BaseTargetGateway):
 
     def reset(self, halt_after: bool = False) -> None:
         self.client.command("reset halt" if halt_after else "reset")
+        if not halt_after:
+            # Mirrors the J-Link backend: resume explicitly rather than
+            # relying on the debug server's default post-reset behaviour.
+            self.resume()
 
     def command(self, line: str) -> str:
         return self.client.command(line)

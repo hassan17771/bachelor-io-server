@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 
 # STM32 OTG_FS USB-host simulation ABI.
@@ -13,38 +12,29 @@ from dataclasses import dataclass, field
 # --- identity ---------------------------------------------------------------
 
 USBH_SIM_MAGIC = 0x48424255  # "USBH" little-endian; written by USBH_LL_Start
-USBH_SIM_VERSION = 0x0001
+USBH_SIM_VERSION = 0x0002
 OTG_FS_IRQn = 67             # NVIC position of OTG_FS_IRQHandler
 
 # --- placement --------------------------------------------------------------
 
-# Fixed RAM address of the UsbhSimBlock MMB.
-# It is the first block in the reserved 8 KB '.mmb' region at the top of RAM:
-#   _mmb_origin = ORIGIN(RAM) + LENGTH(RAM) - _mmb_region_size
-#               = 0x20000000 + 0x20000 - 0x2000 = 0x2001E000
-# Pinned by STM32F411CEUX_FLASH.ld so it is stable across builds and resolvable
-# without the ELF file. Future peripheral MMBs append above this address.
-# Override with WCET_USB_HOST_BASE / a constructor arg for a different MCU.
-USBH_SIM_BASE = 0x2001E000
-
-WCET_USB_HOST_BASE_ENV = "WCET_USB_HOST_BASE"
-
-
-def resolve_usbh_sim_base(default: int = USBH_SIM_BASE) -> int:
-    """MMB base address, honouring the WCET_USB_HOST_BASE override (hex or dec)."""
-    raw = os.environ.get(WCET_USB_HOST_BASE_ENV)
-    if raw is None or not raw.strip():
-        return default
-    return int(raw, 0)
-
+# Name of the UsbhSimBlock instance in the firmware. The block is an ordinary
+# .bss global, so its address is a property of a build and is read from that
+# build's ELF symbol table.
+USBH_SIM_SYMBOL = "usbh_sim"
 
 # --- block geometry ---------------------------------------------------------
 
-NUM_CH = 8                  # UsbhSimBlock.ch[8]
-BUF_SIZE = 64               # per-direction payload buffer
-CH_STRIDE = 140             # sizeof(UsbhSimChannel)
-BLOCK_HEADER_SIZE = 16      # bytes before the channel array
-BLOCK_SIZE = 1136           # sizeof(UsbhSimBlock) = 16 + 8 * 140
+NUM_CH = 8                  # USBH_SIM_NUM_CH
+BUF_SIZE = 64               # USBH_SIM_BUF_SIZE, per-direction payload buffer
+CH_HEADER_SIZE = 12         # UsbhSimChannel fields before out_buf
+BLOCK_HEADER_SIZE = 16      # UsbhSimBlock fields before ch[]
+
+# Both structs are hand-padded, so their sizes are the sum of their parts: no
+# implicit padding to model, and none trailing as long as NUM_CH * CH_STRIDE
+# stays a multiple of 4. A build that disagrees is caught by the block_size
+# check in validate() rather than read at the wrong offsets.
+CH_STRIDE = CH_HEADER_SIZE + 2 * BUF_SIZE            # sizeof(UsbhSimChannel)
+BLOCK_SIZE = BLOCK_HEADER_SIZE + NUM_CH * CH_STRIDE  # sizeof(UsbhSimBlock)
 
 # --- urb_state values (mirror USBH_SIM_URB_* in usbh_sim.h) ------------------
 

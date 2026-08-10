@@ -5,11 +5,10 @@ from .usb.host.stm32_otgfs import (
     CH_STRIDE,
     DEFAULT_USBH_SIM_LAYOUT,
     OTG_FS_IRQn,
-    USBH_SIM_BASE,
     USBH_SIM_MAGIC,
+    USBH_SIM_SYMBOL,
     UsbhSimChannelLayout,
     UsbhSimLayout,
-    resolve_usbh_sim_base,
 )
 
 __all__ = [
@@ -19,9 +18,8 @@ __all__ = [
     "CH_STRIDE",
     "DEFAULT_USBH_SIM_LAYOUT",
     "OTG_FS_IRQn",
-    "USBH_SIM_BASE",
     "USBH_SIM_MAGIC",
+    "USBH_SIM_SYMBOL",
     "UsbhSimChannelLayout",
     "UsbhSimLayout",
-    "resolve_usbh_sim_base",
 ]

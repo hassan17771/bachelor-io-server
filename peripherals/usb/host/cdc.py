@@ -181,7 +181,7 @@ class UsbHostCdcDevice(UsbHostCore):
         self,
         done: Optional[Callable[[], bool]] = None,
         *,
-        timeout_s: float = 20.0,
+        timeout_s: float = 60.0,
         setup_timeout_s: float = 1.0,
         stage_timeout_s: float = 3.0,
     ) -> EnumerationResult:
@@ -192,6 +192,14 @@ class UsbHostCdcDevice(UsbHostCore):
         the firmware-side signal that the CDC class went active. With no ``done``
         the driver stops once it has serviced SET_CONFIGURATION and the CDC
         GET_LINE_CODING (the same traffic that triggers APPLICATION_READY).
+
+        The default budget covers a full enumeration (9-10 control transfers)
+        over a real debug probe: each one costs a couple of seconds of GDB
+        round trips (up to 4.4s observed), so the whole sequence measured
+        25-28s on the F401/J-Link setup -- extrapolating the slowest transfer
+        across all of them puts the ceiling near 47s, hence 60s rather than a
+        thinner margin. On the fake backend every transfer resolves
+        immediately, so the deadline is never approached.
 
         Raises :class:`EnumerationError` if neither condition is met before
         ``timeout_s`` elapses.

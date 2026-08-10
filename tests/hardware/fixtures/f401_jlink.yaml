@@ -1,0 +1,24 @@
+# The f401-USBsim board over an already-running J-Link GDB server:
+#
+#   JLinkGDBServerCLExe -device STM32F401RC -if SWD -speed 4000 -port 2331
+#
+# Describes the board only. Which build is flashed on it is a runtime input:
+# point WCET_FIRMWARE_ELF (or run_suite's elf=) at the .elf the MMB address is
+# read from.
+
+soc:
+  part: STM32F401RC
+  backend: jlink
+  probe:
+    connection: server
+    host: 127.0.0.1
+    port: 2331
+    timeout_s: 2.0
+
+mocks:
+  - name: usb_host
+    class: cdc
+    channels: 8
+    device:
+      vid: 0x0483
+      pid: 0x5740

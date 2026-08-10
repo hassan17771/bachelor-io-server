@@ -261,6 +261,11 @@ class JLinkBackend(BaseTargetGateway):
     def reset(self, halt_after: bool = False) -> None:
         command = "reset halt" if halt_after else "reset"
         self.client.monitor_command(command)
+        if not halt_after:
+            # SEGGER's GDB server halts at the reset vector regardless of
+            # which of the two commands above was sent; only "go" leaves the
+            # core actually running.
+            self.resume()
 
     def monitor_command(self, command: str) -> str:
         return self.client.monitor_command(command)

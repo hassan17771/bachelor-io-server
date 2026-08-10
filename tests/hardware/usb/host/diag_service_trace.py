@@ -8,7 +8,8 @@ actually complete -- this shows whether enumeration progresses past
 GET_DESCRIPTOR(Device,8) and, if not, exactly where and when it stalls.
 
     cd wcet-io-server
-    python tests/hardware/usb/host/diag_service_trace.py
+    WCET_FIRMWARE_ELF=../Release/blackUSB.elf \
+        python tests/hardware/usb/host/diag_service_trace.py
 """
 from __future__ import annotations
 
@@ -23,6 +24,8 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from backends.jlink import JLinkBackend, JLinkConnectionConfig
+from engine.config_parser import ConfigError
+from engine.context import resolve_mmb_base
 from firmware_abi.usb.host.stm32_otgfs import (
     CDC_CONFIGURATION_DESCRIPTOR,
     CDC_DEVICE_DESCRIPTOR,
@@ -32,7 +35,6 @@ from firmware_abi.usb.host.stm32_otgfs import (
     OTG_FS_IRQn,
     URB_DONE,
     USBH_SIM_MAGIC,
-    resolve_usbh_sim_base,
 )
 
 NVIC_ISER_BASE = 0xE000E100
@@ -79,7 +81,11 @@ def _resp_for(wval_hi: int, wlen: int) -> bytes:
 
 def main() -> int:
     layout = DEFAULT_USBH_SIM_LAYOUT
-    base = resolve_usbh_sim_base()
+    try:
+        base = resolve_mmb_base()
+    except ConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     cfg = JLinkConnectionConfig(
         host=os.environ.get("WCET_JLINK_HOST", "127.0.0.1"),
         gdb_port=int(os.environ.get("WCET_JLINK_PORT", "2331"), 0),

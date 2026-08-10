@@ -6,8 +6,6 @@
 soc:
   part: STM32F407VG
   backend: fake
-  gateway:
-    mmb_base: 0x2001E000
 
 mocks:
   - name: usb_host

@@ -18,7 +18,8 @@ target's RX buffer. Nothing is mocked.
     # start the J-Link GDB server first, e.g.
     #   JLinkGDBServerCLExe -device STM32F411CE -if SWD -speed 4000 -port 2331
     cd wcet-io-server
-    WCET_USB_HOST_TEST=1 python -m pytest tests/hardware/usb/host/test_cdc_echo.py
+    WCET_USB_HOST_TEST=1 WCET_FIRMWARE_ELF=../Release/blackUSB.elf \
+        python -m pytest tests/hardware/usb/host/test_cdc_echo.py
 
 Watch the firmware's own view of the exchange on the USART1 console (PA15 TX).
 See tests/support/hardware.py for the environment-variable table.

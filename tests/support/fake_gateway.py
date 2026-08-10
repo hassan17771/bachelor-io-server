@@ -22,7 +22,9 @@ class FakeMmbGateway(BaseTargetGateway):
     * every block write is appended to ``self.writes`` as ``(address, data)`` so
       a test can assert ordering (e.g. urb_state=DONE written last),
     * ``pend_irq`` is recorded in ``self.pended`` and, if ``on_pend_irq`` is set,
-      invokes it so a test can model the target's IRQ reaction.
+      invokes it so a test can model the target's IRQ reaction,
+    * ``reset`` is recorded in ``self.resets`` rather than refused: memory is
+      left untouched, since nothing here models a reboot.
     """
 
     def __init__(self, on_pend_irq: Optional[Callable[["FakeMmbGateway", int], None]] = None) -> None:
@@ -30,6 +32,7 @@ class FakeMmbGateway(BaseTargetGateway):
         self.mem: dict[int, int] = {}
         self.writes: list[tuple[int, bytes]] = []
         self.pended: list[int] = []
+        self.resets: list[bool] = []
         self.on_pend_irq = on_pend_irq
 
     def read(self, address: int, size: int) -> bytes:
@@ -44,6 +47,9 @@ class FakeMmbGateway(BaseTargetGateway):
         self.pended.append(irqn)
         if self.on_pend_irq is not None:
             self.on_pend_irq(self, irqn)
+
+    def reset(self, halt_after: bool = False) -> None:
+        self.resets.append(halt_after)
 
 
 class MmbView:

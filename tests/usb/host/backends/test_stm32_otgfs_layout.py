@@ -5,9 +5,11 @@ import unittest
 from firmware_abi.usb.host.stm32_otgfs import (
     BLOCK_HEADER_SIZE,
     BLOCK_SIZE,
+    BUF_SIZE,
     CDC_CONFIGURATION_DESCRIPTOR,
     CDC_DEVICE_DESCRIPTOR,
     CDC_LINE_CODING_115200_8N1,
+    CH_HEADER_SIZE,
     CH_STRIDE,
     DEFAULT_USBH_SIM_LAYOUT,
     NUM_CH,
@@ -17,10 +19,8 @@ from firmware_abi.usb.host.stm32_otgfs import (
     URB_IDLE,
     URB_NOTREADY,
     URB_STALL,
-    USBH_SIM_BASE,
     USBH_SIM_MAGIC,
     UsbhSimLayout,
-    resolve_usbh_sim_base,
 )
 
 # The C structs from Core/Inc/usbh_sim.h, as ordered (name, size) lists. C lays
@@ -40,8 +40,8 @@ _CHANNEL_FIELDS = [
     ("out_pending", 1),
     ("in_requested", 1),
     ("_pad", 2),
-    ("out_buf", 64),
-    ("in_buf", 64),
+    ("out_buf", BUF_SIZE),
+    ("in_buf", BUF_SIZE),
 ]
 
 _HEADER_FIELDS = [
@@ -76,7 +76,8 @@ class UsbhOtgFsAbiTest(unittest.TestCase):
     # -- sizes ---------------------------------------------------------------
 
     def test_channel_size_is_140(self) -> None:
-        _, size = _offsets(_CHANNEL_FIELDS)
+        offsets, size = _offsets(_CHANNEL_FIELDS)
+        self.assertEqual(offsets["out_buf"], CH_HEADER_SIZE)
         self.assertEqual(size, 140)
         self.assertEqual(size, CH_STRIDE)
         self.assertEqual(size, self.layout.ch_stride)
@@ -127,7 +128,7 @@ class UsbhOtgFsAbiTest(unittest.TestCase):
         # ch(1).ep_addr at block offset 156 (16 + 140)
         self.assertEqual(self.layout.ch(1, "ep_addr"), 156)
         # last channel still inside the block
-        self.assertLess(self.layout.ch(NUM_CH - 1, "in_buf") + 64, BLOCK_SIZE + 1)
+        self.assertLess(self.layout.ch(NUM_CH - 1, "in_buf") + BUF_SIZE, BLOCK_SIZE + 1)
 
     def test_ch_helper_rejects_bad_index(self) -> None:
         with self.assertRaises(ValueError):
@@ -151,31 +152,12 @@ class UsbhOtgFsAbiTest(unittest.TestCase):
         self.assertEqual(USBH_SIM_MAGIC, 0x48424255)
         self.assertEqual(USBH_SIM_MAGIC.to_bytes(4, "little"), bytes([0x55, 0x42, 0x42, 0x48]))
         self.assertEqual(OTG_FS_IRQn, 67)
-        self.assertEqual(USBH_SIM_BASE, 0x2001E000)
 
     def test_urb_state_values(self) -> None:
         self.assertEqual(
             (URB_IDLE, URB_DONE, URB_NOTREADY, URB_ERROR, URB_STALL),
             (0, 1, 2, 4, 5),
         )
-
-    def test_resolve_base_env_override(self) -> None:
-        import os
-
-        key = "WCET_USB_HOST_BASE"
-        saved = os.environ.get(key)
-        try:
-            os.environ.pop(key, None)
-            self.assertEqual(resolve_usbh_sim_base(), USBH_SIM_BASE)
-            os.environ[key] = "0x20001000"
-            self.assertEqual(resolve_usbh_sim_base(), 0x20001000)
-            os.environ[key] = "536879104"  # 0x20002000 in decimal
-            self.assertEqual(resolve_usbh_sim_base(), 0x20002000)
-        finally:
-            if saved is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = saved
 
     # -- CDC descriptors -----------------------------------------------------
 
