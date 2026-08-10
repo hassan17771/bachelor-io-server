@@ -72,9 +72,9 @@ Open design gaps from the Layer 2 design session (see
 Phases 3 and 4 of `docs/plan/test-engine-config-yaml.md` were taken out of
 scope on 2026-08-07; these tasks are the ones they contained, to be picked
 up as their own plan once that plan's Phase 2 lands.
-- [ ] `engine/cli.py`: thin `argparse` entry point (`--robot`, `--config`,
+- [x] `engine/cli.py`: thin `argparse` entry point (`--robot`, `--config`,
       `--outdir`) calling `run_suite()`
-- [ ] End-to-end usage note: exact command line for the fake-backend and
+- [x] End-to-end usage note: exact command line for the fake-backend and
       hardware invocations of `run_suite()`
 - [ ] Keyword reference docs via `python -m robot.libdoc`, generated from
       real docstrings on `CoreKeywords` and `UsbHostCdcKeywords`
