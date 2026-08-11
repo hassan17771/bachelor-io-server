@@ -104,7 +104,7 @@ applies the same `--wrap` mechanism straight to those seven functions.
 ```text
 f103-cansim/
   Core/Inc/can_sim.h                 # CanSimBlock layout, magic/version, CAN_SIM_SYMBOL name
-  Core/Src/can_sim.c                  # can_sim instance (.bss), can_sim_irq_handler()
+  Core/Src/can_sim.c                  # can_sim instance (.bss), can_sim_init()
   Core/Src/can_hal_sim.c               # HAL_CAN_*_Sim -- MMB mechanics, no NVIC/IRQ concerns
   Core/Src/can_hal_sim_wrap.c           # __wrap_HAL_CAN_* -- link-time glue, Simulation config only
 
@@ -137,7 +137,7 @@ Firmware first: the `--wrap` mechanism is unproven in this repo (USB uses a
 different seam), so it needs validating against real linker/build behavior
 before any Python is written against an assumed contract.
 
-- [ ] **0.1 — `can_sim.h`/`can_sim.c`.** `CanSimBlock`: header
+- [x] **0.1 — `can_sim.h`/`can_sim.c`.** `CanSimBlock`: header
       (magic/version/block_size) + `tx[3]` mailbox slots (firmware-owned) +
       one `rx` slot (server-owned) + the stored filter config. `_Static_assert`
       the size, matching `usbh_sim.h`'s pattern.
