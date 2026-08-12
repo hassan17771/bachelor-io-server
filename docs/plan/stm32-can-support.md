@@ -177,7 +177,7 @@ before any Python is written against an assumed contract.
 
 ### Phase 1 — IO server: portable layer
 
-- [ ] **1.1 — `firmware_abi/can/stm32_bxcan.py`.** Layout/offset dataclasses
+- [x] **1.1 — `firmware_abi/can/stm32_bxcan.py`.** Layout/offset dataclasses
       mirroring 0.1, `CAN_SIM_SYMBOL = "can_sim"`, magic/version constants.
       Verify: a layout test asserts the Python offsets against the numbers
       `can_sim.h` documents (mirrors USB's offset-assertion test).
