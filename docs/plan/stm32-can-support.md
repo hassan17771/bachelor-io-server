@@ -188,7 +188,7 @@ before any Python is written against an assumed contract.
       Verify: `tests/test_architecture_boundaries.py` gains the Key
       decision 5 rule; fails against a deliberate throwaway violation, then
       passes clean once it's removed.
-- [ ] **1.3 — `peripherals/can/bus.py`: `CanBus`.** `send_frame(id, data,
+- [x] **1.3 — `peripherals/can/bus.py`: `CanBus`.** `send_frame(id, data,
       ide=False, rtr=False)` / `receive_frame(timeout_s)`, named from the
       mock's side (send = onto the bus for the target; receive = what the
       target put on the bus) — same convention as
