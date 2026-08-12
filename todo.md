@@ -101,4 +101,29 @@ up as their own plan once that plan's Phase 2 lands.
       argument (`Set Pin    <name>    HIGH`) since multiple pins are
       normally active at once — unlike USB CDC's current single-instance
       shortcut above.
+
+## STM32Cube firmware extension tooling
+- [ ] Wiring CAN simulation into `f103-cansim` (docs/plan/stm32-can-support.md,
+      Phase 0) was entirely manual CubeIDE surgery: hand-write the
+      `__wrap_HAL_CAN_*` forwarder file (`Core/Src/can_hal_sim_wrap.c`) against
+      the vendor HAL's prototypes, then hand-edit `.cproject` (Eclipse CDT
+      XML) to add a new "Simulation" `<cconfiguration>` with its own defines
+      (`-DCAN_SIMULATION`), the matching `-Wl,--wrap=HAL_CAN_*` linker flags
+      one per wrapped function, a `<scannerConfigBuildInfo>` block, and a
+      source-exclusion filter on Debug/Release. None of that generalizes:
+      the next peripheral (GPIO, above) or the next STM32Cube SDK/part repeats
+      the same hand-editing from scratch, and CDT XML has sharp edges with no
+      documented precedent (e.g. `excluding=` paths are project-root-relative,
+      not relative to the entry — only discovered empirically this session by
+      inspecting a generated `subdir.mk`).
+- [ ] Needed: a generalized tool that, given an STM32CubeMX/CubeIDE project
+      and a target HAL module (its header's function list), can (a) generate
+      the `__wrap_<fn>`/`<fn>_Sim` forwarder skeleton, and (b) create or patch
+      the simulation build configuration (`.cproject` defines, `--wrap` flags,
+      source exclusions, scanner config) programmatically instead of by hand.
+      Goal: enabling sim support for a new peripheral or a new SDK/part is a
+      command, not a repeat of this session's manual XML edits. Scope,
+      approach (CDT-XML templating vs. driving CubeMX/CubeIDE headlessly vs.
+      moving off CubeIDE project files entirely), and how it fits the plan
+      process are all open — not yet designed.
 t
