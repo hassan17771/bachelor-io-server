@@ -198,7 +198,7 @@ before any Python is written against an assumed contract.
 
 ### Phase 2 — IO server: STM32 backend and engine wiring
 
-- [ ] **2.1 — `peripherals/can/backends/stm32_bxcan.py`:
+- [x] **2.1 — `peripherals/can/backends/stm32_bxcan.py`:
       `Stm32BxcanAbi(CanSimAbi)`.** Translates to MMB reads/writes over
       `TargetGateway`; `irqn` is a constructor parameter (Key decision 5).
       Verify: unit test against `FakeMmbGateway`, mirrors
