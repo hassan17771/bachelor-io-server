@@ -105,8 +105,10 @@ applies the same `--wrap` mechanism straight to those seven functions.
 f103-cansim/
   Core/Inc/can_sim.h                 # CanSimBlock layout, magic/version, CAN_SIM_SYMBOL name
   Core/Src/can_sim.c                  # can_sim instance (.bss), can_sim_init()
+  Core/Inc/can_hal_sim.h                # HAL_CAN_*_Sim prototypes, mirrors usbh_ll_sim.h's pairing
   Core/Src/can_hal_sim.c               # HAL_CAN_*_Sim -- MMB mechanics, no NVIC/IRQ concerns
   Core/Src/can_hal_sim_wrap.c           # __wrap_HAL_CAN_* -- link-time glue, Simulation config only
+  Tests/test_can_hal_sim.c              # host-only unit test for can_hal_sim.c, no target/CubeIDE build
 
 wcet-io-server/
   firmware_abi/can/
@@ -143,14 +145,20 @@ before any Python is written against an assumed contract.
       the size, matching `usbh_sim.h`'s pattern.
       Verify: builds standalone; `sizeof(CanSimBlock)` matches the header's
       own doc comment.
-- [ ] **0.2 — `can_hal_sim.c`: the seven `HAL_CAN_*_Sim` functions.**
-      `Init_Sim`/`ConfigFilter_Sim` (store filter)/`Start_Sim`/
+- [x] **0.2 — `can_hal_sim.c`/`can_hal_sim.h`: the seven `HAL_CAN_*_Sim`
+      functions.** `Init_Sim`/`ConfigFilter_Sim` (store filter, bank
+      bounds-checked against `CAN_SIM_NUM_FILTERS`)/`Start_Sim`/
       `ActivateNotification_Sim`/`AddTxMessage_Sim` (fill a free `tx[]` slot,
-      `HAL_ERROR` if all 3 pending)/`GetRxMessage_Sim` (copy from `rx`)/
-      `IRQHandler_Sim` (apply the stored filter to `rx`, call
-      `HAL_CAN_RxFifo0MsgPendingCallback` on a match).
-      Verify: unit test constructs a `CanSimBlock` in host memory (no
-      target) and drives these functions directly.
+      `HAL_ERROR` if all 3 pending)/`GetRxMessage_Sim` (copy from `rx`, gated
+      on the FIFO the matching filter routed to)/`IRQHandler_Sim` (apply the
+      matching filter's ID/mask arithmetic to `rx`, deliver to
+      `HAL_CAN_RxFifo0MsgPendingCallback` or `RxFifo1MsgPendingCallback` per
+      its `FilterFIFOAssignment`). Only `CAN_FILTERMODE_IDMASK` at
+      `CAN_FILTERSCALE_32BIT` is modelled — identifier-list mode and 16-bit
+      scale use register layouts this project's headers don't name, so
+      rather than guess, a bank configured either way never matches; revisit
+      if a scenario needs one.
+      Verify: `Tests/test_can_hal_sim.c`, host-built, no target.
 - [ ] **0.3 — `can_hal_sim_wrap.c`: `__wrap_HAL_CAN_*`.** Thin forwarders to
       0.2, plus the explicit `HAL_CAN_MspInit` call from `__wrap_HAL_CAN_Init`
       (Key decision 2).
