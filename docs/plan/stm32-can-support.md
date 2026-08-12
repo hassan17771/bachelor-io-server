@@ -159,16 +159,21 @@ before any Python is written against an assumed contract.
       rather than guess, a bank configured either way never matches; revisit
       if a scenario needs one.
       Verify: `Tests/test_can_hal_sim.c`, host-built, no target.
-- [ ] **0.3 — `can_hal_sim_wrap.c`: `__wrap_HAL_CAN_*`.** Thin forwarders to
+- [x] **0.3 — `can_hal_sim_wrap.c`: `__wrap_HAL_CAN_*`.** Thin forwarders to
       0.2, plus the explicit `HAL_CAN_MspInit` call from `__wrap_HAL_CAN_Init`
       (Key decision 2).
       Verify: links cleanly once Task 0.4's config exists — no missing or
       duplicate symbols.
-- [ ] **0.4 — CubeIDE "Simulation" build configuration.** Adds 0.1-0.3 as
+- [x] **0.4 — CubeIDE "Simulation" build configuration.** Adds 0.1-0.3 as
       sources, `-DCAN_SIMULATION`, and the seven `-Wl,--wrap=HAL_CAN_*` flags.
-      Verify: Simulation config builds `f103-cansim` — existing `main.c`/
-      `can.c`/`stm32f1xx_it.c` completely unmodified — to a `.elf` with no
-      errors; Debug/Release still build unmodified.
+      Debug/Release also gained a source-exclusion filter for 0.1-0.3 — not
+      needed for binary correctness (`--gc-sections` already strips that code
+      from an unwrapped build; confirmed via `nm` on both configs), just
+      keeps it out of their object dirs.
+      Verify: Simulation builds to a `.elf` with no errors, `main.c`/`can.c`/
+      `stm32f1xx_it.c` unmodified; `nm` confirms the real vendor `HAL_CAN_*`
+      bodies are gone (gc'd once `--wrap` redirected their only references)
+      and only the `__wrap_`/`_Sim` chain remains.
 
 ### Phase 1 — IO server: portable layer
 
