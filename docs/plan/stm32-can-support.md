@@ -181,7 +181,7 @@ before any Python is written against an assumed contract.
       mirroring 0.1, `CAN_SIM_SYMBOL = "can_sim"`, magic/version constants.
       Verify: a layout test asserts the Python offsets against the numbers
       `can_sim.h` documents (mirrors USB's offset-assertion test).
-- [ ] **1.2 — `peripherals/can/abi.py`: `CanFrame`, `CanSimAbi` (ABC).**
+- [x] **1.2 — `peripherals/can/abi.py`: `CanFrame`, `CanSimAbi` (ABC).**
       `validate()`, `inject_frame(frame: CanFrame)` (bus -> target, writes
       `rx` + pends the IRQ), `wait_for_tx(timeout_s) -> CanFrame` /
       `ack_tx(mailbox)` (target -> bus, drains `tx[]`). No STM32 detail.

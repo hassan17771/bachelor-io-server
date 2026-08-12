@@ -1,7 +1,8 @@
-"""Import-boundary rules for the peripherals/usb package tree.
+"""Import-boundary rules for the peripherals/usb and peripherals/can trees.
 
 The layering is convention until something checks it; this test is that check
-(Task 4.1 of docs/plan/usb-peripheral-restructure.md). Rules enforced:
+(Task 4.1 of docs/plan/usb-peripheral-restructure.md; extended for CAN's
+Key decision 5). Rules enforced:
 
     1. The generic host layer (``peripherals/usb/host/abi.py``, ``core.py``,
        ``cdc.py``) never imports a concrete backend
@@ -10,6 +11,9 @@ The layering is convention until something checks it; this test is that check
     2. The class-agnostic constants (``peripherals/usb/common/*``) never
        import the host layer (``peripherals/usb/host/*``) -- a future
        device-mode or MSC/HID driver must be able to use them standalone.
+    3. The generic CAN layer (``peripherals/can/abi.py``, ``bus.py``) never
+       imports a concrete backend (``peripherals/can/backends/*``), same
+       rule as 1, so the same protocol code stays part-agnostic.
 
 The check is static: each module's AST is scanned for ``import`` /
 ``from ... import`` statements (relative imports resolved against the
@@ -100,6 +104,21 @@ class UsbImportBoundariesTest(unittest.TestCase):
             bad, [],
             "peripherals/usb/common must stay class- and role-agnostic:\n  "
             + "\n  ".join(bad),
+        )
+
+
+class CanImportBoundariesTest(unittest.TestCase):
+    def test_generic_layer_does_not_import_backends(self) -> None:
+        generic = [
+            p
+            for p in _tree("peripherals/can")
+            if "backends" not in p.relative_to(REPO_ROOT / "peripherals/can").parts
+        ]
+        bad = _violations(generic, "peripherals.can.backends")
+        self.assertEqual(
+            bad, [],
+            "the generic can layer (abi.py/bus.py) must stay backend-agnostic "
+            "(backends import the ABC, never the reverse):\n  " + "\n  ".join(bad),
         )
 
 
