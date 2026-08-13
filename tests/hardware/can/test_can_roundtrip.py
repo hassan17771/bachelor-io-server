@@ -13,10 +13,10 @@ CAN_ID_STATUS comes back carrying the same value.
     # start the J-Link GDB server first, e.g.
     #   JLinkGDBServerCLExe -device STM32F103C8 -if SWD -speed 4000 -port 2331
     cd wcet-io-server
-    WCET_CAN_TEST=1 WCET_FIRMWARE_ELF=test/hardware/fixtures/f103_CANsim.elf \
+    WCET_CAN_TEST=1 WCET_FIRMWARE_ELF=tests/hardware/can/fixture/f103_CANsim.elf \
         python -m pytest tests/hardware/can/test_can_roundtrip.py -v
 
-See tests/hardware/fixtures/f103_can_jlink.yaml for the board description and
+See tests/hardware/can/fixture/f103_can_jlink.yaml for the board description and
 tests/support/hardware.py for the shared WCET_JLINK_HOST/PORT/TIMEOUT env vars.
 """
 from __future__ import annotations
@@ -29,7 +29,7 @@ from engine.context import build_context
 from peripherals.can.abi import CanSimError
 from tests.support.hardware import env_float, env_truthy
 
-CONFIG = Path(__file__).parents[1] / "fixtures" / "f103_can_jlink.yaml"
+CONFIG = Path(__file__).parent / "fixture" / "f103_can_jlink.yaml"
 
 # f103-cansim's Core/Inc/main.h: ROLE_DEVICE listens for CAN_ID_COMMAND and
 # echoes the applied value back as CAN_ID_STATUS.
