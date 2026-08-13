@@ -112,6 +112,18 @@ up as their own plan once that plan's Phase 2 lands.
       normally active at once — unlike USB CDC's current single-instance
       shortcut above.
 
+## Register-level peripheral mocking (deferred)
+- [ ] Repointing a peripheral's own registers at the MMB, so the *unmodified*
+      vendor HAL runs against it directly, was investigated for CAN and
+      rejected (docs/plan/stm32-can-support.md, Non-goals): bxCAN's
+      HAL_CAN_Init/Start/Stop poll a status bit with a hardcoded 10 ms
+      timeout right after requesting it, and a J-Link round trip can't
+      reliably beat that clock -- a race against a vendor deadline, not a
+      handshake the IO server can synchronize against. Worth reconsidering
+      for a peripheral whose registers are mostly passive rather than
+      reactive (e.g. the GPIO mock above) instead of the --wrap-the-HAL-API
+      seam CAN and USB both use.
+
 ## STM32Cube firmware extension tooling
 - [ ] Wiring CAN simulation into `f103-cansim` (docs/plan/stm32-can-support.md,
       Phase 0) was entirely manual CubeIDE surgery: hand-write the

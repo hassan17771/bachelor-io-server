@@ -24,6 +24,7 @@ simulated peripheral covers the rest.
 | --- | --- |
 | this file | Layers, gateway, backends, engine, MMB conventions |
 | [usb-host-simulation.md](usb-host-simulation.md) | USB-host mode: mocking a CDC-ACM device for the target's USB host stack |
+| [can-bxcan-simulation.md](can-bxcan-simulation.md) | CAN (bxCAN): mocking the can bus |
 
 A new peripheral gets its own file here, following the USB one's shape: what it
 simulates, its MMB layout, how a transfer flows, and the rules specific to it.

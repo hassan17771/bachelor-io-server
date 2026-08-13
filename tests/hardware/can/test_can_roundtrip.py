@@ -13,7 +13,7 @@ CAN_ID_STATUS comes back carrying the same value.
     # start the J-Link GDB server first, e.g.
     #   JLinkGDBServerCLExe -device STM32F103C8 -if SWD -speed 4000 -port 2331
     cd wcet-io-server
-    WCET_CAN_TEST=1 WCET_FIRMWARE_ELF=../f103-cansim/Simulation/f103_CANsim.elf \
+    WCET_CAN_TEST=1 WCET_FIRMWARE_ELF=test/hardware/fixtures/f103_CANsim.elf \
         python -m pytest tests/hardware/can/test_can_roundtrip.py -v
 
 See tests/hardware/fixtures/f103_can_jlink.yaml for the board description and
