@@ -234,7 +234,7 @@ before any Python is written against an assumed contract.
       it a `class: can` config is rejected before either table is reached.
       Verify: extend `tests/engine/test_context.py` with a CAN-class config
       resolving `can_sim`; existing USB case passes unmodified.
-- [ ] **2.4 — `engine/keywords/can_keywords.py`: `CanKeywords`.**
+- [x] **2.4 — `engine/keywords/can_keywords.py`: `CanKeywords`.**
       `Send CAN Frame` / `Receive CAN Frame`, mirrors
       `usb_host_cdc_keywords.py`'s shape: `MOCK_NAME = "can_bus"` hardcoded
       the same way CDC hardcodes `"usb_host"` (a mismatch with the config's
