@@ -203,7 +203,7 @@ before any Python is written against an assumed contract.
       `TargetGateway`; `irqn` is a constructor parameter (Key decision 5).
       Verify: unit test against `FakeMmbGateway`, mirrors
       `tests/usb/host/backends/test_stm32_otgfs.py`.
-- [ ] **2.2 — `engine/peripheral_factory.py`.** `_DRIVERS["can"] = CanBus`;
+- [x] **2.2 — `engine/peripheral_factory.py`.** `_DRIVERS["can"] = CanBus`;
       `_resolve_abi` grows a `can` branch with a `part -> irqn` table (one
       row: `STM32F103* -> USB_LP_CAN1_RX0_IRQn`).
       Verify: extend the existing `_resolve_abi`/`_resolve_driver` test for
