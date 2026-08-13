@@ -35,7 +35,7 @@ Open design gaps from the Layer 2 design session (see
 ## SoC generality
 - [ ] Capabilities not wired to RF skip/tags yet (`target/capabilities.py`)
 - [ ] Timeouts should be config-driven per SoC/backend, not hardcoded in scripts
-- [ ] No real SoC/peripheral-class → ABI compatibility table; Config Manager's
+- [ ] No real SoC/peripheral-class → **ABI compatibility table**; Config Manager's
       `class:` resolution (test-engine-config-yaml.md Task 1.4) currently
       stubs this as "every STM32 `soc.part` supports `cdc` via
       `Stm32OtgFsHostAbi`" — replace with a real per-part lookup once more
@@ -87,10 +87,9 @@ up as their own plan once that plan's Phase 2 lands.
       `--outdir`) calling `run_suite()`
 - [x] End-to-end usage note: exact command line for the fake-backend and
       hardware invocations of `run_suite()`
-- [ ] Keyword reference docs via `python -m robot.libdoc`, generated from
-      real docstrings on `CoreKeywords` and `UsbHostCdcKeywords`
 - [ ] YAML config reference doc: field-reference table for
       `SocConfig`/`MockConfig`, pointing at `tests/engine/fixtures/minimal_fake.yaml`
+      these references can be hold like zephyr project.
 - [ ] Config-driven timeouts: thread the optional `timeouts:` block
       (`TimeoutConfig`) into peripheral construction, replacing hardcoded
       defaults

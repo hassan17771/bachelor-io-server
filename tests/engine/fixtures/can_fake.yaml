@@ -1,0 +1,12 @@
+# Minimal valid config: one fake-backend CAN bus mock.
+#
+# `backend: fake` only works with WCET_ALLOW_FAKE_BACKEND=1 set; there is
+# deliberately no way to run against nothing by accident.
+
+soc:
+  part: STM32F103C8T6
+  backend: fake
+
+mocks:
+  - name: can_bus
+    class: can
