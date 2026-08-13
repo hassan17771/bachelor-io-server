@@ -83,17 +83,33 @@ applies the same `--wrap` mechanism straight to those seven functions.
    resolves the symbol for whichever class the run's `mocks:` entry names,
    via a small `class -> symbol` map next to `peripheral_factory._DRIVERS`.
    Required by this plan, not new scope.
-7. **Frame slots are ID-agnostic.** The MMB moves raw frames (ID/IDE/RTR/
+7. **Three class-keyed tables, not one shared registry.**
+   `config_parser.KNOWN_PERIPHERAL_CLASSES` (parse-time: reject an unknown
+   `class:` before anything is built), `peripheral_factory._DRIVERS` /
+   `_resolve_abi` (construction-time: class -> driver/ABI), and
+   `context._MMB_SYMBOL_BY_CLASS` (class -> MMB symbol) all list `cdc`/`can`
+   independently. `config_parser` must not import `peripheral_factory` (the
+   engine layers the same direction the architecture doc does — config
+   parsing doesn't know about construction), and the architecture's own rule
+   is that an unrecognised config is a parse-time error, not a
+   construction-time one. A CAN mock config is otherwise minimal — just
+   `name:` + `class: can`; `channels:`/`device:` are CDC-only optionals:
+   ```yaml
+   mocks:
+     - name: can_bus
+       class: can
+   ```
+8. **Frame slots are ID-agnostic.** The MMB moves raw frames (ID/IDE/RTR/
    DLC/data); it has no notion of `CAN_ID_COMMAND`/`CAN_ID_STATUS` or of
    `ROLE_DEVICE`/`ROLE_TESTER` — those stay in `f103-cansim`'s application
    code. This is what makes the same mock usable by a future
    application/board without touching the protocol.
-8. **Filter fidelity via replay, not reimplementation.**
+9. **Filter fidelity via replay, not reimplementation.**
    `HAL_CAN_ConfigFilter_Sim` stores the real `CAN_FilterTypeDef` fields the
    app already computed and applies the same mask arithmetic real silicon
    does before delivering an injected frame — a wrong filter drops a frame
    in simulation the same as on the real bus.
-9. **3 Tx mailboxes, 1 pending Rx slot.** Matches real bxCAN's mailbox count
+10. **3 Tx mailboxes, 1 pending Rx slot.** Matches real bxCAN's mailbox count
    (`HAL_CAN_AddTxMessage`'s "no mailbox free" path behaves the same in both
    builds); Rx starts single-slot since nothing in `f103-cansim` bursts
    multiple frames before consuming one — revisit if a later scenario needs
@@ -122,8 +138,10 @@ wcet-io-server/
     keywords/can_keywords.py           # Send CAN Frame / Receive CAN Frame
     peripheral_factory.py              # + "can" -> CanBus / Stm32BxcanAbi, part->irqn table  [extended]
     context.py                         # resolve_mmb_base() becomes class-keyed                [extended]
+    config_parser.py                   # + "can" in KNOWN_PERIPHERAL_CLASSES                   [extended]
   tests/
     can/...                           # unit tests, FakeMmbGateway, no hardware
+    target/fixtures/f103_cansim.elf    # genuine Simulation-config build, backs resolve_mmb_base() tests
     hardware/can/...                   # opt-in J-Link tests (WCET_CAN_TEST=1)
     hardware/fixtures/f103_can_jlink.yaml
     test_architecture_boundaries.py    # + can/{abi,bus}.py must not import can/backends/*      [extended]
@@ -208,14 +226,33 @@ before any Python is written against an assumed contract.
       row: `STM32F103* -> USB_LP_CAN1_RX0_IRQn`).
       Verify: extend the existing `_resolve_abi`/`_resolve_driver` test for
       `class: can`.
-- [ ] **2.3 — `engine/context.py`: class-keyed `resolve_mmb_base()`.**
-      Replace the hardcoded `USBH_SIM_SYMBOL` lookup with a `class -> symbol`
-      map covering both `cdc` and `can` (Key decision 6).
+- [ ] **2.3 — `engine/context.py`: class-keyed `resolve_mmb_base()`, and
+      `engine/config_parser.py`: register the class.** `context.py` replaces
+      the hardcoded `USBH_SIM_SYMBOL` lookup with a `class -> symbol` map
+      covering both `cdc` and `can` (Key decision 6). `config_parser.py`
+      adds `"can"` to `KNOWN_PERIPHERAL_CLASSES` (Key decision 7) — without
+      it a `class: can` config is rejected before either table is reached.
       Verify: extend `tests/engine/test_context.py` with a CAN-class config
       resolving `can_sim`; existing USB case passes unmodified.
-- [ ] **2.4 — `engine/keywords/can_keywords.py`.** `Send CAN Frame` /
-      `Receive CAN Frame`, mirrors `usb_host_cdc_keywords.py`'s shape
-      (registry lookup by the mock's `name:`).
+- [ ] **2.4 — `engine/keywords/can_keywords.py`: `CanKeywords`.**
+      `Send CAN Frame` / `Receive CAN Frame`, mirrors
+      `usb_host_cdc_keywords.py`'s shape: `MOCK_NAME = "can_bus"` hardcoded
+      the same way CDC hardcodes `"usb_host"` (a mismatch with the config's
+      `name:` is a `registry.peripheral()` `LookupError`), mock resolved via
+      `registry.peripheral(MOCK_NAME)`. Whether `attach`-equivalent polling
+      is needed (`HAL_CAN_Start_Sim` publishes the block's magic, so "not up
+      yet right after reset" applies to CAN the same as it does to CDC's
+      `_await_host_stack`) is this task's design call to make, not defer.
+      ```robotframework
+      *** Settings ***
+      Library    engine.keywords.can_keywords.CanKeywords
+
+      *** Test Cases ***
+      Frame Round Trip
+          Send CAN Frame    0x100    ${{ b'\x01\x02' }}
+          ${frame}=    Receive CAN Frame
+          Should Be Equal As Integers    ${frame.id}    0x100
+      ```
       Verify: unit test drives both keywords through Robot's library-loading
       path (mirrors `tests/engine/test_usb_host_cdc_keywords.py`), not just
       direct Python calls.
@@ -239,7 +276,10 @@ before any Python is written against an assumed contract.
 - [ ] **4.1 — `docs/arch/can-bxcan-simulation.md`.** Peer to
       `usb-host-simulation.md`: the MMB layout, why the seam is `--wrap` on
       `HAL_CAN_*` rather than USB's dispatch layer, any ordering rule the
-      `tx[]`/`rx` slots need, and the Task 3.2 verification story.
+      `tx[]`/`rx` slots need, and the Task 3.2 verification story. Also
+      carries a "From a suite" section — the `Library` import and a
+      `Send CAN Frame` / `Receive CAN Frame` snippet — mirroring
+      `usb-host-simulation.md`'s own (lines 155-171).
 - [ ] **4.2 — Add the new doc to `io-server-architecture.md`'s doc table.**
 - [ ] **4.3 — Record the deferred register-level approach in `todo.md`.**
       One entry capturing Non-goals item 1 (repointed-`CAN1` mocking,

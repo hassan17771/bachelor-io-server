@@ -40,6 +40,17 @@ Open design gaps from the Layer 2 design session (see
       stubs this as "every STM32 `soc.part` supports `cdc` via
       `Stm32OtgFsHostAbi`" — replace with a real per-part lookup once more
       SoCs/ABIs exist
+- [ ] The `mocks:` YAML's `class:` key is named after USB device classes
+      (CDC/HID/MSC) but is actually used as a flat "which peripheral driver
+      to build" selector across every peripheral family — CAN's one value
+      (`can`, docs/plan/stm32-can-support.md) and GPIO's planned two
+      (`gpio_in`/`gpio_out`, below) aren't device classes at all, just
+      driver variants. Works today because the key is just a dispatch
+      string, but the name misleads. Revisit the vocabulary (e.g. splitting
+      a peripheral-family selector from a USB-specific device-class
+      sub-field) once enough peripheral families exist to see the real
+      shape needed — not worth guessing at with only USB and CAN as data
+      points.
 
 ## Modularity
 - [x] CDC/ABC split is convention-only, unenforced — add an import-linter/arch test
