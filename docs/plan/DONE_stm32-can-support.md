@@ -1,6 +1,6 @@
 # Plan: CAN (bxCAN) peripheral simulation
 
-Status: not started.
+Status: Done.
 
 ## Why
 
@@ -273,15 +273,15 @@ before any Python is written against an assumed contract.
 
 ### Phase 4 — documentation
 
-- [ ] **4.1 — `docs/arch/can-bxcan-simulation.md`.** Peer to
+- [x] **4.1 — `docs/arch/can-bxcan-simulation.md`.** Peer to
       `usb-host-simulation.md`: the MMB layout, why the seam is `--wrap` on
       `HAL_CAN_*` rather than USB's dispatch layer, any ordering rule the
       `tx[]`/`rx` slots need, and the Task 3.2 verification story. Also
       carries a "From a suite" section — the `Library` import and a
       `Send CAN Frame` / `Receive CAN Frame` snippet — mirroring
       `usb-host-simulation.md`'s own (lines 155-171).
-- [ ] **4.2 — Add the new doc to `io-server-architecture.md`'s doc table.**
-- [ ] **4.3 — Record the deferred register-level approach in `todo.md`.**
+- [x] **4.2 — Add the new doc to `io-server-architecture.md`'s doc table.**
+- [x] **4.3 — Record the deferred register-level approach in `todo.md`.**
       One entry capturing Non-goals item 1 (repointed-`CAN1` mocking,
       rejected for bxCAN's reactive registers, worth reconsidering for a
       passive-register peripheral) so it doesn't need re-deriving from
