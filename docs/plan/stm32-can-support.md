@@ -226,7 +226,7 @@ before any Python is written against an assumed contract.
       row: `STM32F103* -> USB_LP_CAN1_RX0_IRQn`).
       Verify: extend the existing `_resolve_abi`/`_resolve_driver` test for
       `class: can`.
-- [ ] **2.3 — `engine/context.py`: class-keyed `resolve_mmb_base()`, and
+- [x] **2.3 — `engine/context.py`: class-keyed `resolve_mmb_base()`, and
       `engine/config_parser.py`: register the class.** `context.py` replaces
       the hardcoded `USBH_SIM_SYMBOL` lookup with a `class -> symbol` map
       covering both `cdc` and `can` (Key decision 6). `config_parser.py`
