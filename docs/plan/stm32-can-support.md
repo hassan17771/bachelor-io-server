@@ -259,9 +259,9 @@ before any Python is written against an assumed contract.
 
 ### Phase 3 — hardware verification
 
-- [ ] **3.1 — `tests/hardware/fixtures/f103_can_jlink.yaml`.** One Blue Pill,
+- [x] **3.1 — `tests/hardware/fixtures/f103_can_jlink.yaml`.** One Blue Pill,
       `class: can`, mirrors `f401_jlink.yaml`'s shape.
-- [ ] **3.2 — End-to-end hardware test, opt-in (`WCET_CAN_TEST=1`).** Flash
+- [x] **3.2 — End-to-end hardware test, opt-in (`WCET_CAN_TEST=1`).** Flash
       `f103-cansim`'s `ROLE_DEVICE` firmware, built with the Simulation
       config, to **one** Blue Pill — no second board, no transceiver, no
       breadboard bus. `CanBus.send_frame` a `CAN_ID_COMMAND`; assert
