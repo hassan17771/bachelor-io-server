@@ -17,7 +17,7 @@ from engine.config_schema import (
 )
 
 KNOWN_BACKENDS = frozenset({"jlink", "openocd", "fake"})
-KNOWN_PERIPHERAL_CLASSES = frozenset({"cdc"})
+KNOWN_PERIPHERAL_CLASSES = frozenset({"cdc", "can"})
 PROBE_CONNECTIONS = frozenset({"server", "direct"})
 
 
