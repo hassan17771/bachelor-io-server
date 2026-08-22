@@ -1,6 +1,6 @@
 # Plan: engine/cli.py
 
-Status: not started.
+Status: Done.
 
 Branch: `robot-framework-cli` (already created and checked out — not
 `plan/engine-cli`, by explicit instruction, so §1 of plan-driven-dev is

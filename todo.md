@@ -35,11 +35,22 @@ Open design gaps from the Layer 2 design session (see
 ## SoC generality
 - [ ] Capabilities not wired to RF skip/tags yet (`target/capabilities.py`)
 - [ ] Timeouts should be config-driven per SoC/backend, not hardcoded in scripts
-- [ ] No real SoC/peripheral-class → ABI compatibility table; Config Manager's
+- [ ] No real SoC/peripheral-class → **ABI compatibility table**; Config Manager's
       `class:` resolution (test-engine-config-yaml.md Task 1.4) currently
       stubs this as "every STM32 `soc.part` supports `cdc` via
       `Stm32OtgFsHostAbi`" — replace with a real per-part lookup once more
       SoCs/ABIs exist
+- [ ] The `mocks:` YAML's `class:` key is named after USB device classes
+      (CDC/HID/MSC) but is actually used as a flat "which peripheral driver
+      to build" selector across every peripheral family — CAN's one value
+      (`can`, docs/plan/stm32-can-support.md) and GPIO's planned two
+      (`gpio_in`/`gpio_out`, below) aren't device classes at all, just
+      driver variants. Works today because the key is just a dispatch
+      string, but the name misleads. Revisit the vocabulary (e.g. splitting
+      a peripheral-family selector from a USB-specific device-class
+      sub-field) once enough peripheral families exist to see the real
+      shape needed — not worth guessing at with only USB and CAN as data
+      points.
 
 ## Modularity
 - [x] CDC/ABC split is convention-only, unenforced — add an import-linter/arch test
@@ -72,14 +83,13 @@ Open design gaps from the Layer 2 design session (see
 Phases 3 and 4 of `docs/plan/test-engine-config-yaml.md` were taken out of
 scope on 2026-08-07; these tasks are the ones they contained, to be picked
 up as their own plan once that plan's Phase 2 lands.
-- [ ] `engine/cli.py`: thin `argparse` entry point (`--robot`, `--config`,
+- [x] `engine/cli.py`: thin `argparse` entry point (`--robot`, `--config`,
       `--outdir`) calling `run_suite()`
-- [ ] End-to-end usage note: exact command line for the fake-backend and
+- [x] End-to-end usage note: exact command line for the fake-backend and
       hardware invocations of `run_suite()`
-- [ ] Keyword reference docs via `python -m robot.libdoc`, generated from
-      real docstrings on `CoreKeywords` and `UsbHostCdcKeywords`
 - [ ] YAML config reference doc: field-reference table for
       `SocConfig`/`MockConfig`, pointing at `tests/engine/fixtures/minimal_fake.yaml`
+      these references can be hold like zephyr project.
 - [ ] Config-driven timeouts: thread the optional `timeouts:` block
       (`TimeoutConfig`) into peripheral construction, replacing hardcoded
       defaults
@@ -101,4 +111,41 @@ up as their own plan once that plan's Phase 2 lands.
       argument (`Set Pin    <name>    HIGH`) since multiple pins are
       normally active at once — unlike USB CDC's current single-instance
       shortcut above.
+
+## Register-level peripheral mocking (deferred)
+- [ ] Repointing a peripheral's own registers at the MMB, so the *unmodified*
+      vendor HAL runs against it directly, was investigated for CAN and
+      rejected (docs/plan/stm32-can-support.md, Non-goals): bxCAN's
+      HAL_CAN_Init/Start/Stop poll a status bit with a hardcoded 10 ms
+      timeout right after requesting it, and a J-Link round trip can't
+      reliably beat that clock -- a race against a vendor deadline, not a
+      handshake the IO server can synchronize against. Worth reconsidering
+      for a peripheral whose registers are mostly passive rather than
+      reactive (e.g. the GPIO mock above) instead of the --wrap-the-HAL-API
+      seam CAN and USB both use.
+
+## STM32Cube firmware extension tooling
+- [ ] Wiring CAN simulation into `f103-cansim` (docs/plan/stm32-can-support.md,
+      Phase 0) was entirely manual CubeIDE surgery: hand-write the
+      `__wrap_HAL_CAN_*` forwarder file (`Core/Src/can_hal_sim_wrap.c`) against
+      the vendor HAL's prototypes, then hand-edit `.cproject` (Eclipse CDT
+      XML) to add a new "Simulation" `<cconfiguration>` with its own defines
+      (`-DCAN_SIMULATION`), the matching `-Wl,--wrap=HAL_CAN_*` linker flags
+      one per wrapped function, a `<scannerConfigBuildInfo>` block, and a
+      source-exclusion filter on Debug/Release. None of that generalizes:
+      the next peripheral (GPIO, above) or the next STM32Cube SDK/part repeats
+      the same hand-editing from scratch, and CDT XML has sharp edges with no
+      documented precedent (e.g. `excluding=` paths are project-root-relative,
+      not relative to the entry — only discovered empirically this session by
+      inspecting a generated `subdir.mk`).
+- [ ] Needed: a generalized tool that, given an STM32CubeMX/CubeIDE project
+      and a target HAL module (its header's function list), can (a) generate
+      the `__wrap_<fn>`/`<fn>_Sim` forwarder skeleton, and (b) create or patch
+      the simulation build configuration (`.cproject` defines, `--wrap` flags,
+      source exclusions, scanner config) programmatically instead of by hand.
+      Goal: enabling sim support for a new peripheral or a new SDK/part is a
+      command, not a repeat of this session's manual XML edits. Scope,
+      approach (CDT-XML templating vs. driving CubeMX/CubeIDE headlessly vs.
+      moving off CubeIDE project files entirely), and how it fits the plan
+      process are all open — not yet designed.
 t

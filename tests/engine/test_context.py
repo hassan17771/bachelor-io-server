@@ -10,14 +10,18 @@ from engine.context import (
     build_context,
     resolve_mmb_base,
 )
+from peripherals.can.backends.stm32_bxcan import Stm32BxcanAbi
+from peripherals.can.bus import CanBus
 from peripherals.usb.host.backends.stm32_otgfs import Stm32OtgFsHostAbi
 from peripherals.usb.host.cdc import UsbHostCdcDevice
 from tests.support.fake_gateway import FakeMmbGateway
 
 FIXTURE = Path(__file__).parent / "fixtures" / "minimal_fake.yaml"
 ELF = Path(__file__).parents[1] / "target" / "fixtures" / "f401_usbsim.elf"
+CAN_ELF = Path(__file__).parents[1] / "target" / "fixtures" / "f103_cansim.elf"
 
 USBH_SIM_ADDR = 0x200000EC
+CAN_SIM_ADDR = 0x20000058
 
 
 @pytest.fixture(autouse=True)
@@ -48,6 +52,26 @@ def test_the_peripheral_gets_the_address_from_the_elf():
     ctx = build_context(FIXTURE, elf=ELF)
 
     assert ctx.peripherals["usb_host"].abi.base_address == USBH_SIM_ADDR
+
+
+def test_a_can_class_config_resolves_can_sim(tmp_path):
+    config_path = tmp_path / "can_fake.yaml"
+    config_path.write_text(
+        "soc:\n"
+        "  part: STM32F103C8T6\n"
+        "  backend: fake\n"
+        "mocks:\n"
+        "  - name: can_bus\n"
+        "    class: can\n"
+    )
+
+    ctx = build_context(config_path, elf=CAN_ELF)
+
+    can_bus = ctx.peripherals["can_bus"]
+    assert isinstance(can_bus, CanBus)
+    assert isinstance(can_bus.abi, Stm32BxcanAbi)
+    assert can_bus.abi.gateway is ctx.gateway
+    assert can_bus.abi.base_address == CAN_SIM_ADDR
 
 
 def test_the_elf_argument_resolves_the_mmb():
